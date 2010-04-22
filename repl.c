@@ -259,23 +259,30 @@ static int spaces_after(int point) {
     return strspn(rl_line_buffer + point, " \t\v");
 }
 
-static int newline_callback(int count, int key) {
-    rl_insert_text("\n");
-    int i = line_start(rl_point);
-    if (i) {
-        int is = spaces_after(i);
-        int j = line_start(i-1);
-        int js = spaces_after(j);
-        int s = js - is;
-        if (!j) s -= prompt_length;
-        if (s > 0) {
-            while (s--) rl_insert_text(" ");
-            rl_point = i + spaces_after(i);
-            return 0;
+static int first_unclosed(int a, int b) {
+    int i, first = -1, unclosed = 0;
+    for (i=0; i < (b-a); i++) {
+        // TODO: handle quotes.
+        char c = rl_line_buffer[a+i];
+        if (c=='(' || c=='[' || c=='{') {
+            if (!unclosed) first = i;
+            unclosed++;
+        } else if (c==')' || c==']' || c=='}') {
+            unclosed--;
+            if (!unclosed) first = -1;
         }
     }
-    for (i = 0; i < prompt_length + tab_width; i++)
-        rl_insert_text(" ");
+    return first;
+}
+
+static int newline_callback(int count, int key) {
+    int i = line_start(rl_point);
+    int j = line_end(rl_point);
+    int u = first_unclosed(i,j) + 1;
+    int s = u ? u : i ? spaces_after(i) : tab_width;
+    if (!i) s += prompt_length;
+    rl_insert_text("\n");
+    while (s--) rl_insert_text(" ");
     return 0;
 }
 
