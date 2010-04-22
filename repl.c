@@ -255,6 +255,10 @@ static int line_end(int point) {
     return nl - rl_line_buffer;
 }
 
+static int spaces_after(int point) {
+    return strspn(rl_line_buffer + point, " \t\v");
+}
+
 static int newline_callback(int count, int key) {
     rl_insert_text("\n");
     int i;
@@ -290,11 +294,28 @@ static int space_callback(int count, int key) {
     return 0;
 }
 
+static void insert_tab() {
+    int i;
+    for (i=0; i < tab_width; i++)
+        rl_insert_text(" ");
+}
+
 static int tab_callback(int count, int key) {
     if (rl_point > 0) {
-        int i;
-        for (i=0; i < tab_width; i++)
-            rl_insert_text(" ");
+        int i = line_start(rl_point);
+        int is = spaces_after(i);
+        if (i && rl_point <= i + is) {
+            int k = line_start(i-1);
+            int ks = spaces_after(k);
+            int s = ks - is;
+            if (!k) s -= prompt_length;
+            if (s > 0) {
+                while (s--) rl_insert_text(" ");
+                rl_point = i + spaces_after(i);
+                return 0;
+            }
+        }
+        insert_tab();
     }
     return 0;
 }
