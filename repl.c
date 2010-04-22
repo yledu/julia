@@ -261,8 +261,20 @@ static int spaces_after(int point) {
 
 static int newline_callback(int count, int key) {
     rl_insert_text("\n");
-    int i;
-    for (i = 0; i < prompt_length; i++)
+    int i = line_start(rl_point);
+    if (i) {
+        int is = spaces_after(i);
+        int j = line_start(i-1);
+        int js = spaces_after(j);
+        int s = js - is;
+        if (!j) s -= prompt_length;
+        if (s > 0) {
+            while (s--) rl_insert_text(" ");
+            rl_point = i + spaces_after(i);
+            return 0;
+        }
+    }
+    for (i = 0; i < prompt_length + tab_width; i++)
         rl_insert_text(" ");
     return 0;
 }
@@ -305,10 +317,10 @@ static int tab_callback(int count, int key) {
         int i = line_start(rl_point);
         int is = spaces_after(i);
         if (i && rl_point <= i + is) {
-            int k = line_start(i-1);
-            int ks = spaces_after(k);
-            int s = ks - is;
-            if (!k) s -= prompt_length;
+            int j = line_start(i-1);
+            int js = spaces_after(j);
+            int s = js - is;
+            if (!j) s -= prompt_length;
             if (s > 0) {
                 while (s--) rl_insert_text(" ");
                 rl_point = i + spaces_after(i);
