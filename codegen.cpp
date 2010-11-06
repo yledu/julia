@@ -66,6 +66,10 @@ static const Type *T_float32;
 static const Type *T_pfloat32;
 static const Type *T_float64;
 static const Type *T_pfloat64;
+static const Type *T_float80;
+static const Type *T_pfloat80;
+static const Type *T_float128;
+static const Type *T_pfloat128;
 static const Type *T_void;
 #ifdef JL_GC_MARKSWEEP
 static const Type *T_gcframe;
@@ -1397,6 +1401,10 @@ static void init_julia_llvm_env(Module *m)
     T_pfloat32 = PointerType::get(T_float32, 0);
     T_float64 = Type::getDoubleTy(getGlobalContext());
     T_pfloat64 = PointerType::get(T_float64, 0);
+    T_float80 = Type::getX86_FP80Ty(getGlobalContext());
+    T_pfloat80 = PointerType::get(T_float80, 0);
+    T_float128 = Type::getFP128Ty(getGlobalContext());
+    T_pfloat128 = PointerType::get(T_float128, 0);
     T_void = Type::getVoidTy(jl_LLVMContext);
 
     // add needed base definitions to our LLVM environment

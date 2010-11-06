@@ -54,6 +54,8 @@ jl_bits_type_t *jl_int64_type;
 jl_bits_type_t *jl_uint64_type;
 jl_bits_type_t *jl_float32_type;
 jl_bits_type_t *jl_float64_type;
+jl_bits_type_t *jl_float80_type;
+jl_bits_type_t *jl_float128_type;
 
 jl_tuple_t *jl_null;
 

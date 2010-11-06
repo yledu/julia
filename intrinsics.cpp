@@ -2,8 +2,8 @@ namespace JL_I {
     enum intrinsic {
         // wrap and unwrap
         boxui8=0, boxsi8, boxui16, boxsi16, boxui32, boxsi32, boxui64, boxsi64,
-        boxf32, boxf64, box,
-        unbox8, unbox16, unbox32, unbox64, unbox,
+        boxf32, boxf64, boxf80, boxf128, box,
+        unbox8, unbox16, unbox32, unbox64, unbox80, unbox128, unbox,
         // arithmetic
         neg_int, add_int, sub_int, mul_int,
         sdiv_int, udiv_int, srem_int, urem_int,
@@ -24,9 +24,11 @@ namespace JL_I {
         sext16, zext16, sext32, zext32, sext64, zext64,
         trunc8, trunc16, trunc32,
         fptoui8, fptosi8, fptoui16, fptosi16, fptoui32, fptosi32,
-        fptoui64, fptosi64, 
+        fptoui64, fptosi64,
         uitofp32, sitofp32, uitofp64, sitofp64,
-        fptrunc32, fpext64,
+        uitofp80, sitofp80, uitofp128, sitofp128,
+        fptrunc32, fptrunc64, fptrunc80,
+        fpext64, fpext80, fpext128,
         // functions
         sqrt_float, powi_float, sin_float, cos_float, pow_float,
         // c interface
@@ -46,11 +48,15 @@ static Function *box_int64_func;
 static Function *box_uint64_func;
 static Function *box_float32_func;
 static Function *box_float64_func;
+static Function *box_float80_func;
+static Function *box_float128_func;
 static Function *box_pointer_func;
 static Function *box8_func;
 static Function *box16_func;
 static Function *box32_func;
 static Function *box64_func;
+static Function *box80_func;
+static Function *box128_func;
 
 /*
   low-level intrinsics design:
@@ -125,14 +131,17 @@ static jl_value_t *julia_type_of(Value *v)
 // see if a julia type maps directly to an llvm type
 static bool is_julia_type_representable(jl_value_t *jt)
 {
-    return
-        (jt == (jl_value_t*)jl_bool_type || jt == (jl_value_t*)jl_int8_type ||
-         jt == (jl_value_t*)jl_int16_type || jt == (jl_value_t*)jl_int32_type ||
-         jt == (jl_value_t*)jl_int64_type ||
-         jt == (jl_value_t*)jl_float32_type ||
-         jt == (jl_value_t*)jl_float64_type ||
-         (jl_is_cpointer_type(jt) &&
-          is_julia_type_representable(jl_tparam0(jt))));
+    return (jt == (jl_value_t*)jl_bool_type ||
+            jt == (jl_value_t*)jl_int8_type ||
+            jt == (jl_value_t*)jl_int16_type ||
+            jt == (jl_value_t*)jl_int32_type ||
+            jt == (jl_value_t*)jl_int64_type ||
+            jt == (jl_value_t*)jl_float32_type ||
+            jt == (jl_value_t*)jl_float64_type ||
+            jt == (jl_value_t*)jl_float80_type ||
+            jt == (jl_value_t*)jl_float128_type ||
+            (jl_is_cpointer_type(jt) &&
+             is_julia_type_representable(jl_tparam0(jt))));
 }
 
 static Value *NoOpCast(Value *v)
@@ -182,6 +191,8 @@ static const Type *julia_type_to_llvm(jl_value_t *jt)
     if (jt == (jl_value_t*)jl_bool_type) return T_int1;
     if (jt == (jl_value_t*)jl_float32_type) return T_float32;
     if (jt == (jl_value_t*)jl_float64_type) return T_float64;
+    if (jt == (jl_value_t*)jl_float80_type) return T_float80;
+    if (jt == (jl_value_t*)jl_float128_type) return T_float128;
     //if (jt == (jl_value_t*)jl_null) return T_void;
     if (jl_is_bits_type(jt) && jl_is_cpointer_type(jt)) {
         const Type *lt = julia_type_to_llvm(jl_tparam0(jt));
@@ -217,6 +228,8 @@ static jl_value_t *llvm_type_to_julia(const Type *t)
     if (t == T_int64) return (jl_value_t*)jl_int64_type;
     if (t == T_float32) return (jl_value_t*)jl_float32_type;
     if (t == T_float64) return (jl_value_t*)jl_float64_type;
+    if (t == T_float80) return (jl_value_t*)jl_float80_type;
+    if (t == T_float128) return (jl_value_t*)jl_float128_type;
     if (t == T_void) return (jl_value_t*)jl_bottom_type;
     if (t == jl_pvalue_llvmt)
         return (jl_value_t*)jl_any_type;
@@ -247,6 +260,8 @@ static Value *boxed(Value *v)
     if (jb == jl_int64_type) return builder.CreateCall(box_int64_func, v);
     if (jb == jl_float32_type) return builder.CreateCall(box_float32_func, v);
     if (jb == jl_float64_type) return builder.CreateCall(box_float64_func, v);
+    if (jb == jl_float80_type) return builder.CreateCall(box_float80_func, v);
+    if (jb == jl_float128_type) return builder.CreateCall(box_float128_func, v);
     if (jb == jl_uint8_type)  return builder.CreateCall(box_uint8_func, v);
     if (jb == jl_uint16_type) return builder.CreateCall(box_uint16_func, v);
     if (jb == jl_uint32_type) return builder.CreateCall(box_uint32_func, v);
@@ -269,6 +284,10 @@ static Value *boxed(Value *v)
             return builder.CreateCall2(box32_func, literal_pointer_val(jt), v);
         if (nb == 64)
             return builder.CreateCall2(box64_func, literal_pointer_val(jt), v);
+        if (nb == 80)
+            return builder.CreateCall2(box80_func, literal_pointer_val(jt), v);
+        if (nb == 128)
+            return builder.CreateCall2(box128_func, literal_pointer_val(jt), v);
     }
     assert("Don't know how to box this type" && false);
     return NULL;
@@ -558,6 +577,7 @@ static Value *emit_unbox(const Type *to, const Type *pto, Value *x)
 
 static Value *emit_unboxed(jl_value_t *e, jl_codectx_t *ctx)
 {
+    // TODO: unclear why some types are here but others aren't?
     if (jl_is_int32(e)) {
         return ConstantInt::get(T_int32, jl_unbox_int32(e));
     }
@@ -663,6 +683,12 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
     HANDLE(boxf64,1)
         if (t != T_float64) x = builder.CreateBitCast(x, T_float64);
         return mark_julia_type(x, jl_float64_type);
+    HANDLE(boxf80,1)
+        if (t != T_float80) x = builder.CreateBitCast(x, T_float80);
+        return mark_julia_type(x, jl_float80_type);
+    HANDLE(boxf128,1)
+        if (t != T_float128) x = builder.CreateBitCast(x, T_float128);
+        return mark_julia_type(x, jl_float128_type);
 
     HANDLE(unbox8,1)
         return emit_unbox(T_int8, T_pint8, x);
@@ -672,6 +698,10 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
         return emit_unbox(T_int32, T_pint32, x);
     HANDLE(unbox64,1)
         return emit_unbox(T_int64, T_pint64, x);
+    HANDLE(unbox80,1)
+        return emit_unbox(T_float80, T_pfloat80, x);
+    HANDLE(unbox128,1)
+        return emit_unbox(T_float128, T_pfloat128, x);
 
     HANDLE(neg_int,1)
         return builder.CreateSub(ConstantInt::get(t, 0), x);
@@ -806,10 +836,26 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
         return builder.CreateUIToFP(x, T_float64);
     HANDLE(sitofp64,1)
         return builder.CreateSIToFP(x, T_float64);
+    HANDLE(uitofp80,1)
+        return builder.CreateUIToFP(x, T_float80);
+    HANDLE(sitofp80,1)
+        return builder.CreateSIToFP(x, T_float80);
+    HANDLE(uitofp128,1)
+        return builder.CreateUIToFP(x, T_float128);
+    HANDLE(sitofp128,1)
+        return builder.CreateSIToFP(x, T_float128);
     HANDLE(fptrunc32,1)
         return builder.CreateFPTrunc(FP(x), T_float32);
+    HANDLE(fptrunc64,1)
+        return builder.CreateFPTrunc(FP(x), T_float64);
+    HANDLE(fptrunc80,1)
+        return builder.CreateFPTrunc(FP(x), T_float80);
     HANDLE(fpext64,1)
         return builder.CreateFPExt(FP(x), T_float64);
+    HANDLE(fpext80,1)
+        return builder.CreateFPExt(FP(x), T_float80);
+    HANDLE(fpext128,1)
+        return builder.CreateFPExt(FP(x), T_float128);
 
     HANDLE(sqrt_float,1)
         fx = FP(x);
@@ -902,8 +948,10 @@ extern "C" void jl_init_intrinsic_functions()
 {
     ADD_I(boxui8); ADD_I(boxsi8); ADD_I(boxui16); ADD_I(boxsi16);
     ADD_I(boxui32); ADD_I(boxsi32); ADD_I(boxui64); ADD_I(boxsi64);
-    ADD_I(boxf32); ADD_I(boxf64); ADD_I(box); ADD_I(unbox);
+    ADD_I(boxf32); ADD_I(boxf64); ADD_I(boxf80); ADD_I(boxf128);
+    ADD_I(box); ADD_I(unbox);
     ADD_I(unbox8); ADD_I(unbox16); ADD_I(unbox32); ADD_I(unbox64);
+    ADD_I(unbox80); ADD_I(unbox128);
     ADD_I(neg_int); ADD_I(add_int); ADD_I(sub_int); ADD_I(mul_int);
     ADD_I(sdiv_int); ADD_I(udiv_int); ADD_I(srem_int); ADD_I(urem_int);
     ADD_I(neg_float); ADD_I(add_float); ADD_I(sub_float); ADD_I(mul_float);
@@ -921,11 +969,11 @@ extern "C" void jl_init_intrinsic_functions()
     ADD_I(sext16); ADD_I(zext16); ADD_I(sext32); ADD_I(zext32);
     ADD_I(sext64); ADD_I(zext64);
     ADD_I(trunc8); ADD_I(trunc16); ADD_I(trunc32);
-    ADD_I(fptoui8); ADD_I(fptosi8);
-    ADD_I(fptoui16); ADD_I(fptosi16); ADD_I(fptoui32); ADD_I(fptosi32);
-    ADD_I(fptoui64); ADD_I(fptosi64);
+    ADD_I(fptoui8); ADD_I(fptosi8); ADD_I(fptoui16); ADD_I(fptosi16);
+    ADD_I(fptoui32); ADD_I(fptosi32); ADD_I(fptoui64); ADD_I(fptosi64);
     ADD_I(uitofp32); ADD_I(sitofp32); ADD_I(uitofp64); ADD_I(sitofp64);
-    ADD_I(fptrunc32); ADD_I(fpext64);
+    ADD_I(uitofp80); ADD_I(sitofp80); ADD_I(uitofp128); ADD_I(sitofp128);
+    ADD_I(fptrunc32); ADD_I(fpext64); ADD_I(fptrunc80); ADD_I(fpext128);
     ADD_I(sqrt_float); ADD_I(powi_float); ADD_I(pow_float);
     ADD_I(sin_float); ADD_I(cos_float);
     ADD_I(ccall);
@@ -935,15 +983,20 @@ extern "C" void jl_init_intrinsic_functions()
     BOX_F(int32); BOX_F(uint32);
     BOX_F(int64); BOX_F(uint64);
     BOX_F(float32); BOX_F(float64);
+    BOX_F(float80); BOX_F(float128);
 
-    box8_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int8),
-                              "jl_box8", (void*)*jl_box8);
-    box16_func = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int16),
-                              "jl_box16", (void*)*jl_box16);
-    box32_func = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int32),
-                              "jl_box32", (void*)*jl_box32);
-    box64_func = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int64),
-                              "jl_box64", (void*)*jl_box64);
+    box8_func   = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int8),
+                               "jl_box8", (void*)*jl_box8);
+    box16_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int16),
+                               "jl_box16", (void*)*jl_box16);
+    box32_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int32),
+                               "jl_box32", (void*)*jl_box32);
+    box64_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int64),
+                               "jl_box64", (void*)*jl_box64);
+    box80_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_float80),
+                               "jl_box80", (void*)*jl_box80);
+    box128_func = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_float128),
+                               "jl_box128", (void*)*jl_box128);
 
     std::vector<const Type*> boxpointerargs(0);
     boxpointerargs.push_back(jl_pvalue_llvmt);

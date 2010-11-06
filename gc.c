@@ -544,6 +544,21 @@ void *alloc_4w()
 #endif
 }
 
+void *alloc_5w()
+{
+    if (allocd_bytes > collect_interval)
+        jl_gc_collect();
+    allocd_bytes += (5*sizeof(void*));
+#ifdef MEMDEBUG
+    return alloc_big(5*sizeof(void*));
+#endif
+#ifdef BITS64
+    return pool_alloc(&pools[8]);
+#else
+    return pool_alloc(&pools[3]);
+#endif
+}
+
 void jl_gc_init()
 {
     int szc[N_POOLS] = { 8, 12, 16, 20, 24, 28, 32, 48, 64, 96, 128, 192, 256,

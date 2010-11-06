@@ -255,6 +255,8 @@ extern jl_bits_type_t *jl_int64_type;
 extern jl_bits_type_t *jl_uint64_type;
 extern jl_bits_type_t *jl_float32_type;
 extern jl_bits_type_t *jl_float64_type;
+extern jl_bits_type_t *jl_float80_type;
+extern jl_bits_type_t *jl_float128_type;
 
 extern jl_bits_type_t *jl_pointer_type;
 extern jl_bits_type_t *jl_pointer_void_type;
@@ -353,6 +355,8 @@ void *alloc_permanent(size_t sz);
 #define jl_is_uint64(v)      jl_typeis(v,jl_uint64_type)
 #define jl_is_float32(v)     jl_typeis(v,jl_float32_type)
 #define jl_is_float64(v)     jl_typeis(v,jl_float64_type)
+#define jl_is_float80(v)     jl_typeis(v,jl_float80_type)
+#define jl_is_float128(v)    jl_typeis(v,jl_float128_type)
 #define jl_is_bool(v)        jl_typeis(v,jl_bool_type)
 #define jl_is_symbol(v)      jl_typeis(v,jl_sym_type)
 #define jl_is_expr(v)        jl_typeis(v,jl_expr_type)
@@ -476,10 +480,14 @@ jl_value_t *jl_box_int64(int64_t x);
 jl_value_t *jl_box_uint64(uint64_t x);
 jl_value_t *jl_box_float32(float x);
 jl_value_t *jl_box_float64(double x);
+jl_value_t *jl_box_float80(__float80 x);
+jl_value_t *jl_box_float128(__float128 x);
 jl_value_t *jl_box8 (jl_bits_type_t *t, int8_t  x);
 jl_value_t *jl_box16(jl_bits_type_t *t, int16_t x);
 jl_value_t *jl_box32(jl_bits_type_t *t, int32_t x);
 jl_value_t *jl_box64(jl_bits_type_t *t, int64_t x);
+jl_value_t *jl_box80(jl_bits_type_t *t, __float80 x);
+jl_value_t *jl_box128(jl_bits_type_t *t, __float128 x);
 int8_t jl_unbox_bool(jl_value_t *v);
 int8_t jl_unbox_int8(jl_value_t *v);
 uint8_t jl_unbox_uint8(jl_value_t *v);
@@ -491,6 +499,8 @@ int64_t jl_unbox_int64(jl_value_t *v);
 uint64_t jl_unbox_uint64(jl_value_t *v);
 float jl_unbox_float32(jl_value_t *v);
 double jl_unbox_float64(jl_value_t *v);
+__float80 jl_unbox_float80(jl_value_t *v);
+__float128 jl_unbox_float128(jl_value_t *v);
 jl_value_t *jl_box_pointer(jl_bits_type_t *ty, void *p);
 void *jl_unbox_pointer(jl_value_t *v);
 
@@ -645,6 +655,7 @@ void jl_gc_collect();
 void *alloc_2w();
 void *alloc_3w();
 void *alloc_4w();
+void *alloc_5w();
 
 #else
 

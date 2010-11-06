@@ -691,22 +691,26 @@ jl_value_t *pfx##_##type(c_type x)                                      \
     return v;                                                           \
 }
 #endif
-BOX_FUNC(int8,    int8_t,   jl_new_box, 2)
-BOX_FUNC(uint8,   uint8_t,  jl_new_box, 2)
-BOX_FUNC(int16,   int16_t,  jl_new_box, 2)
-BOX_FUNC(uint16,  uint16_t, jl_new_box, 2)
-BOX_FUNC(int32,   int32_t,  jl_new_box, 2)
-BOX_FUNC(uint32,  uint32_t, jl_new_box, 2)
+BOX_FUNC(int8,     int8_t,     jl_new_box, 2)
+BOX_FUNC(uint8,    uint8_t,    jl_new_box, 2)
+BOX_FUNC(int16,    int16_t,    jl_new_box, 2)
+BOX_FUNC(uint16,   uint16_t,   jl_new_box, 2)
+BOX_FUNC(int32,    int32_t,    jl_new_box, 2)
+BOX_FUNC(uint32,   uint32_t,   jl_new_box, 2)
 #ifdef BITS64
-BOX_FUNC(int64,   int64_t,  jl_new_box, 2)
-BOX_FUNC(uint64,  uint64_t, jl_new_box, 2)
-BOX_FUNC(float32, float,    jl_box, 2)
-BOX_FUNC(float64, double,   jl_box, 2)
+BOX_FUNC(int64,    int64_t,    jl_new_box, 2)
+BOX_FUNC(uint64,   uint64_t,   jl_new_box, 2)
+BOX_FUNC(float32,  float,      jl_box, 2)
+BOX_FUNC(float64,  double,     jl_box, 2)
+BOX_FUNC(float80,  __float80,  jl_box, 3)
+BOX_FUNC(float128, __float128, jl_box, 3)
 #else
-BOX_FUNC(int64,   int64_t,  jl_new_box, 3)
-BOX_FUNC(uint64,  uint64_t, jl_new_box, 3)
-BOX_FUNC(float32, float,    jl_box, 2)
-BOX_FUNC(float64, double,   jl_box, 3)
+BOX_FUNC(int64,    int64_t,    jl_new_box, 3)
+BOX_FUNC(uint64,   uint64_t,   jl_new_box, 3)
+BOX_FUNC(float32,  float,      jl_box, 2)
+BOX_FUNC(float64,  double,     jl_box, 3)
+BOX_FUNC(float80,  __float80,  jl_box, 4)
+BOX_FUNC(float128, __float128, jl_box, 5)
 #endif
 
 #define NBOX_C 2048
@@ -831,6 +835,9 @@ jl_value_t *jl_box_bool(int8_t x)
     return jl_false;
 }
 
+#define int80_t __float80
+#define int128_t __float128
+
 #ifdef JL_GC_MARKSWEEP
 #define BOXN_FUNC(nb,nw)                                        \
 jl_value_t *jl_box##nb(jl_bits_type_t *t, int##nb##_t x)        \
@@ -854,13 +861,18 @@ jl_value_t *jl_box##nb(jl_bits_type_t *t, int##nb##_t x)                \
     return v;                                                           \
 }
 #endif
-BOXN_FUNC(8,  2)
-BOXN_FUNC(16, 2)
-BOXN_FUNC(32, 2)
+
+BOXN_FUNC(8,   2)
+BOXN_FUNC(16,  2)
+BOXN_FUNC(32,  2)
 #ifdef BITS64
-BOXN_FUNC(64, 2)
+BOXN_FUNC(64,  2)
+BOXN_FUNC(80,  3)
+BOXN_FUNC(128, 3)
 #else
-BOXN_FUNC(64, 3)
+BOXN_FUNC(64,  3)
+BOXN_FUNC(80,  4)
+BOXN_FUNC(128, 5)
 #endif
 
 #define UNBOX_FUNC(j_type,c_type)                                       \

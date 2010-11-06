@@ -227,6 +227,8 @@ void jl_get_builtin_hooks()
 
     jl_float32_type = (jl_bits_type_t*)global("Float32");
     jl_float64_type = (jl_bits_type_t*)global("Float64");
+    jl_float80_type = (jl_bits_type_t*)global("Float80");
+    jl_float128_type = (jl_bits_type_t*)global("Float128");
 
     jl_array_type = (jl_struct_type_t*)global("Array");
     jl_latin1_string_type = (jl_struct_type_t*)global("Latin1String");

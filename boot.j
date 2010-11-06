@@ -96,8 +96,10 @@ bitstype 32 Uint32 <: Int{Uint32}
 bitstype 64 Int64  <: Int{Int64}
 bitstype 64 Uint64 <: Int{Uint64}
 
-bitstype 32 Float32 <: Float{Float32}
-bitstype 64 Float64 <: Float{Float64}
+bitstype  32 Float32  <: Float{Float32}
+bitstype  64 Float64  <: Float{Float64}
+bitstype  80 Float80  <: Float{Float80}
+bitstype 128 Float128 <: Float{Float128}
 
 typealias Size Int32
 typealias Index Int32
