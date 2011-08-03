@@ -836,7 +836,7 @@ let _tranpose_ = nothing
         p = zeros(s[2],s[1])
         #TODO
         ##calculate actual maxlen
-        maxlen = 32
+        maxlen = 128
         transpose_helper(p,x, 1,1, size(x)..., maxlen)
         p
     end
