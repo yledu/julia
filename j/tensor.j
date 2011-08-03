@@ -335,10 +335,12 @@ function gen_cartesian_map(cache, genbodies, ranges, exargnames, exargs...)
 	            bodies = bodies[2:end,:]
             elseif (length(size(bodies))==1)
                 #println("1d array noticed")
+                #println(length(bodies))
                 body = bodies[1]
+                #println(N)
                 bodies_tmp = cell(N,2)
                 for i = 1:N
-                    bodies_tmp[i] = bodies[i]
+                    bodies_tmp[i] = bodies[i+1]
                     bodies_tmp[i+N] = nothing
                 end
                 bodies = bodies_tmp
@@ -357,6 +359,7 @@ function gen_cartesian_map(cache, genbodies, ranges, exargnames, exargs...)
             end
             _F_
         end
+        #println(fexpr)
         f = eval(fexpr)
         cache[N] = f
     else
@@ -816,9 +819,43 @@ ctranspose(x::AbstractVector) = [ conj(x[j])   | i=1, j=1:size(x,1) ]
 transpose(x::AbstractMatrix)  = [ x[j,i]       | i=1:size(x,2), j=1:size(x,1) ]
 ctranspose(x::AbstractMatrix) = [ conj(x[j,i]) | i=1:size(x,2), j=1:size(x,1) ]
 
+let _tranpose_ = nothing
+    global transpose2
+    
+    function transpose_one(x,p,hidis,lendis,hilen,lenlen)
+        #println("hidis $hidis,lendis $lendis, hilen $hilen, lenlen $lenlen")
+        for i = hidis:hilen+hidis-1
+            for j = lendis:lenlen+lendis-1
+                p[j,i] = x[i,j]
+            end
+        end
+    end
+
+    function transpose2(x::AbstractMatrix)
+        s = size(x)
+        p = zeros(s[2],s[1])
+        #TODO
+        ##calculate actual maxlen
+        maxlen = 32
+        transpose_helper(p,x, 1,1, size(x)..., maxlen)
+        p
+    end
+
+    function transpose_helper(p, x, hidis,lendis, hilen, lenlen, maxlen)
+        if ( hilen <= maxlen && lenlen <= maxlen)
+            transpose_one(x,p,hidis,lendis,hilen,lenlen)
+        elseif (hilen < lenlen)
+            transpose_helper(p, x, hidis, lendis, hilen, div(lenlen,2),maxlen)
+            transpose_helper(p, x, hidis, lendis+div(lenlen,2), hilen, lenlen-div(lenlen,2), maxlen)
+        else
+            transpose_helper(p, x, hidis, lendis, div(hilen,2) ,lenlen, maxlen) 
+            transpose_helper(p, x, hidis+div(hilen,2), lendis, hilen-div(hilen,2), lenlen,maxlen)
+        end
+    end
+#end let
+end
+
 let permute_cache = nothing
-
-
 global permute
 function permute(A::AbstractArray, perm)
     dimsA = size(A)
@@ -968,18 +1005,8 @@ function find{T}(A::AbstractMatrix{T})
     return (I, J)
 end
 
-let find_cache = nothing
-function find_one(ivars)
-    s = { quote I[$i][count] = $ivars[i] end | i = 1:length(ivars)}
-    quote
-	Aind = A[$(ivars...)]
-	if Aind != z
-	    $(s...)
-	    count +=1
-	end
-    end
-end
 
+let find_cache = nothing
 global find
 function find{T}(A::AbstractArray{T})
     ndimsA = ndims(A)
@@ -991,7 +1018,28 @@ function find{T}(A::AbstractArray{T})
         find_cache = HashTable()
     end
 
-    gen_cartesian_map(find_cache, find_one, ranges, {:A, :I, :count, :z}, A,I,1, zero(T))
+    function find_one(ivars)
+        bodies = cell(ndimsA+1)
+        for i = 1:ndimsA+1
+            bodies[i] = nothing
+        end
+        s = { quote I[$i][count] = $ivars[i]; end | i = 1:length(ivars)}
+        bodies[1] = 
+        quote
+            Aind = A[$(ivars...)]
+            if Aind != z
+                $(s...)
+                count +=1
+            end
+        end
+        bodies[end] = quote
+            count = 1
+            z = $zero(T)
+        end
+        bodies
+    end
+
+    gen_cartesian_map(find_cache, find_one, ranges, {:A, :I}, A,I)
     return I
 end
 end
