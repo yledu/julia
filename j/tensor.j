@@ -819,8 +819,54 @@ ctranspose(x::AbstractVector) = [ conj(x[j])   | i=1, j=1:size(x,1) ]
 transpose(x::AbstractMatrix)  = [ x[j,i]       | i=1:size(x,2), j=1:size(x,1) ]
 ctranspose(x::AbstractMatrix) = [ conj(x[j,i]) | i=1:size(x,2), j=1:size(x,1) ]
 
+function countoff(x)
+    for i = 1:numel(x)
+        x[i] = i
+    end
+    x
+end
+
+foo = countoff(zeros(10,2))
+
+function transpose3(x::AbstractMatrix)
+    p = zeros(size(x,2),size(x,1))
+    n1 = size(x,1)
+    n2 = size(x,2)
+    println("n1 ", n1)
+    println("n2 ", n2)
+    #create plan
+    #execute plan 
+    #destroy plan
+    #plan = ccall(dlsym(libfftw, :fftw_plan_guru_dft), Ptr{Void}, (Int32, Ptr{Int32}, Int32, Ptr{Int32}, Ptr{Void}, Ptr{Void}, Int32, Uint32), int32(0), int32([n1,n2,n2]),int32(2),int32([n2,1,1]) ,x ,p, int32(-1), FFTW_ESTIMATE)
+     #n1 = size(x,1)
+     #n2 = size(x,2)
+     #plan = ccall(dlsym(libfftw, :fftw_plan_guru_dft), Ptr{Void}, (Int32, Ptr{Int32}, Int32, Ptr{Int32}, Ptr{Void}, Ptr{Void}, Int32, Uint32), int32(0), int32([]),int32(2),int32([n1,n2,1,n2,1,n1]) ,x ,p, int32(-1), FFTW_ESTIMATE)
+     plan = ccall(dlsym(libfftw, :fftw_plan_guru_dft), Ptr{Void}, (Int32, Ptr{Int32}, Int32, Ptr{Int32}, Ptr{Float64}, Ptr{Float64}, Int32, Uint32), int32(0), int32([]),int32(2),int32([n1,n2,1,n2,1,n1]) ,x ,p, int32(-1), FFTW_ESTIMATE)
+    jl_fftw_execute(Float64, plan)
+    jl_fftw_destroy_plan(Float64, plan)
+    println("no error in running")
+    p
+end
+
 let _tranpose_ = nothing
     global transpose2
+ #   global transpose
+
+    function transpose5(x::AbstractMatrix)
+        println("what")
+        p = zeros(size(x,2),size(x,1))
+        println("bob")
+        n1 = size(x,1)
+        n2 = size(x,2)
+        #create plan
+        #execut plan 
+        #destroy plan
+        println(n1)
+        plan =  ccall(dlsym(libfftw, :fftw_plan_dft_2d), (Array{Int32}, Array{Int32}, Ptr{Void}, Ptr{Void}), {(n1,n2,n2),(n2,1,1)} ,{} ,x ,p )
+        println("shit didn't die")
+    end
+
+
     
     function transpose_one(x,p,hidis,lendis,hilen,lenlen)
         #println("hidis $hidis,lendis $lendis, hilen $hilen, lenlen $lenlen")
