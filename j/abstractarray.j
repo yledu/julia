@@ -1,12 +1,9 @@
-## tensor.j : Functions over tensors, not specialized to specific implementation
+## abstractarray.j : Generic array interfaces.
 
 ## Type aliases for convenience ##
 
 typealias AbstractVector{T} AbstractArray{T,1}
 typealias AbstractMatrix{T} AbstractArray{T,2}
-typealias Vector{T} Array{T,1}
-typealias Matrix{T} Array{T,2}
-typealias VecOrMat{T} Union(Vector{T}, Matrix{T})
 
 typealias Indices{T<:Int} Union(Int, AbstractVector{T})
 typealias Region Union(Size,Dims)
@@ -19,6 +16,18 @@ numel(t::AbstractArray) = prod(size(t))
 length(a::AbstractArray) = numel(a)
 nnz(a::AbstractArray) = (n = 0; for i=1:numel(a); n += a[i] != 0 ? 1 : 0; end; n)
 nnz(a::AbstractArray{Bool}) = (n = 0; for i=1:numel(a); n += a[i] == true ? 1 : 0; end; n)
+
+function stride(a::AbstractArray, i::Int)
+    s = 1
+    for n=1:(i-1)
+        s *= size(a, n)
+    end
+    s
+end
+strides{T}(a::AbstractArray{T,1}) = (1,)
+strides{T}(a::AbstractArray{T,2}) = (1, size(a,1))
+strides{T}(a::AbstractArray{T,3}) = (1, size(a,1), size(a,1)*size(a,2))
+strides   (a::AbstractArray)      = ntuple(ndims(a), i->stride(a,i))
 
 ## Constructors ##
 
@@ -131,14 +140,18 @@ end
 *(A::AbstractArray, B::Number) = A .* B
 
 ./(x::AbstractArray, y::AbstractArray) = reshape( [ x[i] ./ y[i] | i=1:numel(x) ], size(x) )
-./(x::Number, y::AbstractArray) = reshape( [ x    ./ y[i] | i=1:numel(y) ], size(y) )
-./(x::AbstractArray, y::Number) = reshape( [ x[i] ./ y    | i=1:numel(x) ], size(x) )
+./(x::Number,        y::AbstractArray) = reshape( [ x    ./ y[i] | i=1:numel(y) ], size(y) )
+./(x::AbstractArray, y::Number       ) = reshape( [ x[i] ./ y    | i=1:numel(x) ], size(x) )
 
 /(A::Number, B::AbstractArray) = A ./ B
 /(A::AbstractArray, B::Number) = A ./ B
 
 \(A::Number, B::AbstractArray) = B ./ A
 \(A::AbstractArray, B::Number) = B ./ A
+
+.^(x::AbstractArray, y::AbstractArray) = reshape( [ x[i] ^ y[i] | i=1:numel(x) ], size(x) )
+.^(x::Number,        y::AbstractArray) = reshape( [ x    ^ y[i] | i=1:numel(y) ], size(y) )
+.^(x::AbstractArray, y::Number       ) = reshape( [ x[i] ^ y    | i=1:numel(x) ], size(x) )
 
 macro binary_arithmetic_op(f)
     quote
@@ -171,7 +184,6 @@ end # macro
 @binary_arithmetic_op (+)
 @binary_arithmetic_op (-)
 @binary_arithmetic_op (.*)
-@binary_arithmetic_op (.^)
 @binary_arithmetic_op div
 @binary_arithmetic_op mod
 
@@ -789,12 +801,24 @@ isempty(a::AbstractArray) = (numel(a) == 0)
 #map(f, v::AbstractVector) = [ f(v[i]) | i=1:length(v) ]
 #map(f, M::AbstractMatrix) = [ f(M[i,j]) | i=1:size(M,1), j=1:size(M,2) ]
 
-function map(f, A::AbstractArray)
-    F = similar(A, size(A))
+function map_to(dest::AbstractArray, f, A::AbstractArray)
     for i=1:numel(A)
-        F[i] = f(A[i])
+        dest[i] = f(A[i])
     end
-    return F
+    return dest
+end
+
+function map(f, A::AbstractArray)
+    if isempty(A)
+        return A
+    end
+    first = f(A[1])
+    dest = Array(typeof(first), size(A))
+    dest[1] = first
+    for i=2:numel(A)
+        dest[i] = f(A[i])
+    end
+    return dest
 end
 
 #obsolete code, mainly here for reference purposes, use gen_cartesian_map
@@ -989,9 +1013,9 @@ end
 
 ## Other array functions ##
 
-function repmat{T}(a::Matrix{T}, m::Size, n::Size)
+function repmat(a::AbstractMatrix, m::Size, n::Size)
     o,p = size(a)
-    b = Array(T, o*m, p*n)
+    b = similar(a, o*m, p*n)
     for j=1:n
         d = (j-1)*p+1
         R = d:d+p-1
@@ -1132,7 +1156,7 @@ end
 
 ## subarrays ##
 
-type SubArray{T,N,A<:AbstractArray,I<:(Indices...)} <: AbstractArray{T,N}
+type SubArray{T,N,A<:AbstractArray,I<:(Ranges...,)} <: AbstractArray{T,N}
     parent::A
     indexes::I
     dims::Dims
@@ -1140,10 +1164,17 @@ type SubArray{T,N,A<:AbstractArray,I<:(Indices...)} <: AbstractArray{T,N}
     SubArray(p::A, i::I) = new(p, i, map(length, i))
 end
 
-sub{T,N}(A::AbstractArray{T,N}, i::NTuple{N,Indices}) =
+sub{T,N}(A::AbstractArray{T,N}, i::NTuple{N,Ranges}) =
     SubArray{T,N,typeof(A),typeof(i)}(A, i)
 
-sub(A::AbstractArray, i::Indices...) = sub(A, i)
+#change integer indexes into Range1 objects
+sub(A::AbstractArray, i::Indices...) =
+    sub(A, ntuple(length(i), j -> isa(i[j],Ranges) ? i[j] :
+                                                     (i[j]:i[j])))
+
+sub(A::SubArray, i::Indices...) =
+    sub(A.parent, ntuple(length(i), j -> isa(i[j],Ranges) ? A.indexes[j][i[j]] :
+                                                            (A.indexes[j][i[j]]):(A.indexes[j][i[j]])))
 
 size(s::SubArray) = s.dims
 ndims{T,N}(s::SubArray{T,N}) = N
@@ -1161,3 +1192,26 @@ ref{T}(s::SubArray{T,2}, i::Int, j::Int) =
 ref(s::SubArray, is::Int...) = s.parent[map(ref, s.indexes, is)...]
 
 ref(s::SubArray, i::Int) = s[ind2sub(size(s), i)...]
+
+strides{T,A<:AbstractArray}(s::SubArray{T,1,A,(Range1{Index},)}) = (1,)
+strides{T,A<:AbstractArray}(s::SubArray{T,1,A,(Range{Index},)}) = s.indexes[1].step > 0 ? (s.indexes[1].step,) :
+    error("strides: must have ranges with positive step")
+
+strides{T}(s::SubArray{T,2}) = (isa(s.indexes[1],Range1{Index}) ? 1 :
+                                s.indexes[1].step > 0           ? s.indexes[1].step :
+                                error("strides: must have ranges with positive step"),
+                                isa(s.indexes[2],Range1{Index}) ? size(s.parent,1) :
+                                s.indexes[2].step > 0           ? s.indexes[2].step * size(s.parent,1) :
+                                error("strides: must have ranges with positive step"))
+
+function strides{T,N}(s::SubArray{T,N})
+    a = strides(s.parent)
+    return ntuple(N, i -> stride(s,i))
+end
+
+function stride(s::SubArray, i::Int)
+    a = stride(s.parent, i)
+    return isa(s.indexes[i],Range1{Index}) ? a :
+               s.indexes[i].step > 0       ? s.indexes[i].step * a :
+               error("stride: must have ranges with positive step")
+end

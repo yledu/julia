@@ -18,32 +18,28 @@ load("reduce.j")
 load("complex.j")
 load("rational.j")
 
-# operator aliases
-pow = ^
-
 # load libc - julia already links against it so process handle works
 libc = ccall(:jl_load_dynamic_library, Ptr{Void}, (Ptr{Uint8},), C_NULL)
 load("libc.j")
 
 # core data structures (used by type inference)
-load("tensor.j")
+load("abstractarray.j")
 load("array.j")
 load("intset.j")
 load("table.j")
 
 # compiler
 load("inference.j")
-ccall(:jl_enable_inference,Void,())
+ccall(:jl_enable_inference, Void, ())
 
 # strings & printing
 load("io.j")
 ccall(:jl_set_memio_func, Void, ())
-set_current_output_stream(make_stdout_stream())  # for error reporting
+set_current_output_stream(make_stdout_stream()) # for error reporting
 load("string.j")
 load("ascii.j")
 load("utf8.j")
 load("show.j")
-
 load("env.j")
 
 # core math functions
@@ -60,10 +56,6 @@ load("linalg_arpack.j")
 load("fft.j")
 
 # additional data types
-#load("list.j")
-#load("queue.j")
-load("sparse.j")
-#load("tree.j")
 load("set.j")
 
 # I/O and concurrency
@@ -77,6 +69,15 @@ load("darray.j")
 # misc
 load("util.j")
 load("regex.j")
+
+# version information
+VERSION_STRING = readall(`cat $JULIA_HOME/VERSION`)[1:end-1]
+VERSION_COMMIT = readall(`git rev-parse HEAD`)[1:end-1]
+VERSION_CLEAN = run(`git diff --quiet`)
+VERSION_TIME = readall(
+    `git log -1 --pretty=format:%ct` |
+    `perl -MPOSIX=strftime -e 'print strftime "%F %T", gmtime <>'`
+)
 
 # front end
 load("client.j")

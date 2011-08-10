@@ -11,17 +11,17 @@ type Rational{T<:Int} <: Real
         new(num, den)
     end
 end
-Rational{T<:Int}(n::T, d::T) = Rational{T}(n, d)
+Rational{T<:Int}(n::T, d::T) = Rational{T}(n,d)
 Rational(n::Int, d::Int) = Rational(promote(n,d)...)
-Rational(n::Int) = Rational(n, one(n))
+Rational(n::Int) = Rational(n,one(n))
 
 //(n::Int, d::Int) = Rational(n,d)
 //(x::Rational, y::Int) = x.num // (x.den*y)
 //(x::Int, y::Rational) = (x*y.den) // y.num
-//(x::ComplexPair, y::Real) = complex(real(x)//y, imag(x)//y)
-//(x::Real, y::ComplexPair) = x*y'//real(y*y')
+//(x::Complex, y::Real) = complex(real(x)//y, imag(x)//y)
+//(x::Real, y::Complex) = x*y'//real(y*y')
 
-function //(x::ComplexPair, y::ComplexPair)
+function //(x::Complex, y::Complex)
     xy = x*y'
     yy = real(y*y')
     complex(real(xy)//yy, imag(xy)//yy)
@@ -87,8 +87,8 @@ isequal(x::Rational, y::Rational) = x.num == y.num && x.den == y.den
 hash(x::Rational) = bitmix(hash(x.num),hash(x.den))
 
 ==(x::Rational, y::Rational) = !isnan(x) && x.num == y.num && x.den == y.den
-==(x::Rational, y::Int)      = x.den == 1 && x.num == y
-==(y::Int, x::Rational)      = x.den == 1 && x.num == y
+==(x::Rational, y::Int) = x.den == 1 && x.num == y
+==(y::Int, x::Rational) = x.den == 1 && x.num == y
 
 <=(x::Rational, y::Rational) = float(x) <= float(y) # TODO: better comparison
 < (x::Rational, y::Rational) = float(x) < float(y)  # TODO: better comparison

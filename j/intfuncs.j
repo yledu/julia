@@ -73,7 +73,7 @@ function power_by_squaring(x, p::Int)
     elseif p == 0
         return one(x)
     elseif p < 0
-        return inv(x^(-p))
+        error("power_by_squaring: exponent must be >= 0, got $p")
     elseif p == 2
         return x*x
     end
@@ -100,8 +100,9 @@ function power_by_squaring(x, p::Int)
     return x
 end
 
-^(x, p::Int) = power_by_squaring(x,p)
-^{T<:Int}(x::T, p::T) = power_by_squaring(x,p)
+^(x, p::Int)          = power_by_squaring(x,p)
+^(x::Int, p::Int)     = p < 0 ? inv(x^(-p)) : power_by_squaring(float64(x),p)
+^{T<:Int}(x::T, p::T) = p < 0 ? inv(x^(-p)) : power_by_squaring(float64(x),p)
 
 # x^p mod m
 function powermod(x::Int, p::Int, m::Int)
