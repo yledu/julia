@@ -272,9 +272,59 @@ function complex{T<:Real}(A::AbstractArray{T})
     return F
 end
 
-## Binary comparison operators ##
+## boolean comparison operators ##
 
-macro binary_comparison_op(f)
+function isequal(A::AbstractArray, B::AbstractArray)
+    if size(A) != size(B)
+        return false
+    end
+    for i = 1:numel(A)
+        if !isequal(A[i], B[i])
+            return false
+        end
+    end
+    return true
+end
+
+function ==(A::AbstractArray, B::AbstractArray)
+    if size(A) != size(B)
+        return false
+    end
+    for i = 1:numel(A)
+        if A[i] != B[i]
+            return false
+        end
+    end
+    return true
+end
+
+function <(A::AbstractArray, B::AbstractArray)
+    for i = 1:min(numel(A),numel(B))
+        if A[i] < B[i]
+            return true
+        end
+        if A[i] > B[i]
+            return false
+        end
+    end
+    return numel(A) < numel(B)
+end
+
+function <=(A::AbstractArray, B::AbstractArray)
+    for i = 1:min(numel(A),numel(B))
+        if A[i] < B[i]
+            return true
+        end
+        if A[i] > B[i]
+            return false
+        end
+    end
+    return numel(A) <= numel(B)
+end
+
+## vectorized comparison operators ##
+
+macro _jl_vector_comparison_op(f)
     quote
         function ($f)(A::AbstractArray, B::AbstractArray)
             if size(A) != size(B); error("argument dimensions must match"); end
@@ -301,10 +351,12 @@ macro binary_comparison_op(f)
     end
 end
 
-@binary_comparison_op (==)
-@binary_comparison_op (!=)
-@binary_comparison_op (<)
-@binary_comparison_op (<=)
+@_jl_vector_comparison_op (.==)
+@_jl_vector_comparison_op (.!=)
+@_jl_vector_comparison_op (.<)
+@_jl_vector_comparison_op (.<=)
+@_jl_vector_comparison_op (.>)
+@_jl_vector_comparison_op (.>=)
 
 ## code generator for specializing on the number of dimensions ##
 
@@ -1088,18 +1140,6 @@ prod{T}(A::AbstractArray{T}, region::Region) = areduce(*,A,region,one(T))
 all(A::AbstractArray{Bool}, region::Region) = areduce(all,A,region,true)
 any(A::AbstractArray{Bool}, region::Region) = areduce(any,A,region,false)
 count(A::AbstractArray{Bool}, region::Region) = areduce(count,A,region,0,Size)
-
-function isequal(A::AbstractArray, B::AbstractArray)
-    if size(A) != size(B)
-        return false
-    end
-    for i = 1:numel(A)
-        if !isequal(A[i], B[i])
-            return false
-        end
-    end
-    return true
-end
 
 for (f, op) = ((:cumsum, :+), (:cumprod, :*) )
     @eval function ($f)(v::AbstractVector)

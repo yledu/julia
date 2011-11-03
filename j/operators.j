@@ -5,7 +5,7 @@
 
 super(T::Union(CompositeKind,BitsKind,AbstractKind)) = T.super
 
-## comparison ##
+## boolean comparison operators ##
 
 isequal(x,y) = is(x,y)
 ==(x,y) = isequal(x,y)
@@ -19,6 +19,17 @@ isequal(x::Number, y::Number)  = hash(x)==hash(y) && x==y
 > (x,y) = y < x
 <=(x,y) = x < y || x == y
 >=(x,y) = y <= x
+
+## vectorized comparison operators ##
+
+.==(x,y) = x == y
+.!=(x,y) = x != y
+.< (x,y) = x <  y
+.<=(x,y) = x <= y
+.> (x,y) = x >  y
+.>=(x,y) = x >= y
+
+## core min/max definitions ##
 
 max(x, y) = x > y ? x : y
 min(x, y) = x < y ? x : y

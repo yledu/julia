@@ -13,11 +13,9 @@ system_error(p, b::Bool) = b ? error(SystemError(string(p))) : nothing
 
 ## assertion functions and macros ##
 
-assert_test(b::Bool) = b
-assert_test(b::AbstractArray{Bool}) = all(b)
-assert(x) = assert(x,'?')
-assert(x,labl) = assert_test(x) ? nothing : error("assertion failed: ", labl)
+assert(x::Bool) = assert(x, '?')
+assert(x::Bool, label) = x ? nothing : error("assertion failed: ", label)
 
 macro assert(ex)
-    :(assert_test($ex) ? nothing : error("assertion failed: ", $string(ex)))
+    :(assert($ex, $string(ex)))
 end
