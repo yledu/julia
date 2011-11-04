@@ -222,13 +222,19 @@ static int is_intrinsic(jl_sym_t *s)
 
 static int has_intrinsics(jl_expr_t *e)
 {
+    if (jl_is_assignnode(e))
+        return has_intrinsics((jl_expr_t*)jl_fieldref(e,1));
+    if (jl_is_returnnode(e))
+        return has_intrinsics((jl_expr_t*)jl_fieldref(e,0));
+    if (!jl_is_expr(e))
+        return 0;
     if (e->head == call_sym && jl_is_symbol(jl_exprarg(e,0)) &&
         is_intrinsic((jl_sym_t*)jl_exprarg(e,0)))
         return 1;
     int i;
     for(i=0; i < e->args->length; i++) {
         jl_value_t *a = jl_exprarg(e,i);
-        if (jl_is_expr(a) && has_intrinsics((jl_expr_t*)a))
+        if (has_intrinsics((jl_expr_t*)a))
             return 1;
     }
     return 0;
@@ -238,24 +244,27 @@ static int has_intrinsics(jl_expr_t *e)
 // the compiler or the interpreter.
 static int eval_with_compiler_p(jl_expr_t *expr, int compileloops)
 {
-    if (expr->head==body_sym) {
-        jl_array_t *body = expr->args;
-        size_t i;
-        for(i=0; i < body->length; i++) {
-            jl_value_t *stmt = jl_cellref(body,i);
-            if (jl_is_expr(stmt)) {
-                // TODO: only backward branches
-                if (compileloops &&
-                    (((jl_expr_t*)stmt)->head == goto_sym ||
-                     ((jl_expr_t*)stmt)->head == goto_ifnot_sym)) {
+    if (jl_is_expr(expr)) {
+        if (expr->head==body_sym) {
+            jl_array_t *body = expr->args;
+            size_t i;
+            for(i=0; i < body->length; i++) {
+                jl_value_t *stmt = jl_cellref(body,i);
+                if (compileloops && jl_is_gotonode(stmt))
                     return 1;
+                if (jl_is_expr(stmt)) {
+                    // TODO: only backward branches
+                    if (compileloops &&
+                        ((jl_expr_t*)stmt)->head == goto_ifnot_sym) {
+                        return 1;
+                    }
+                    // to compile code that uses exceptions
+                    /*
+                      if (((jl_expr_t*)stmt)->head == enter_sym) {
+                      return 1;
+                      }
+                    */
                 }
-                // to compile code that uses exceptions
-                /*
-                if (((jl_expr_t*)stmt)->head == enter_sym) {
-                    return 1;
-                }
-                */
             }
         }
     }
@@ -273,7 +282,7 @@ jl_value_t *jl_toplevel_eval_flex(jl_value_t *ex, int fast)
     jl_lambda_info_t *thk;
     int ewc = 0;
     if (jl_typeof(ex) != (jl_type_t*)jl_lambda_info_type) {
-        if (jl_is_expr(ex) && eval_with_compiler_p((jl_expr_t*)ex, fast)) {
+        if (eval_with_compiler_p((jl_expr_t*)ex, fast)) {
             thk = jl_wrap_expr(ex);
             ewc = 1;
         }
@@ -1291,6 +1300,8 @@ void jl_init_primitives(void)
     add_builtin("GotoNode", (jl_value_t*)jl_gotonode_type);
     add_builtin("QuoteNode", (jl_value_t*)jl_quotenode_type);
     add_builtin("TopNode", (jl_value_t*)jl_topnode_type);
+    add_builtin("AssignNode", (jl_value_t*)jl_assignnode_type);
+    add_builtin("ReturnNode", (jl_value_t*)jl_returnnode_type);
     add_builtin("Ptr", (jl_value_t*)jl_pointer_type);
     add_builtin("LambdaStaticData", (jl_value_t*)jl_lambda_info_type);
     add_builtin("Box", (jl_value_t*)jl_box_type);

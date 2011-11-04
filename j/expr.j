@@ -14,6 +14,8 @@ expr(hd::Symbol, args::ANY...) = Expr(hd, {args...}, Any)
 expr(hd::Symbol, args::Array{Any,1}) = Expr(hd, args, Any)
 copy(e::Expr) = Expr(e.head, isempty(e.args) ? e.args : copy(e.args), e.typ)
 copy(s::SymbolNode) = SymbolNode(s.name, s.typ)
+copy(a::AssignNode) = AssignNode(a.lhs, a.rhs)
+copy(r::ReturnNode) = ReturnNode(r.expr)
 # doesn't need to be copied, since the type of one of these will always
 # be the same.
 #copy(s::TopNode)    = TopNode(s.name, s.typ)
@@ -22,6 +24,9 @@ isequal(x::Expr, y::Expr) = (is(x.head,y.head) && isequal(x.args,y.args))
 isequal(x::SymbolNode, y::SymbolNode) = is(x.name,y.name)
 isequal(x::SymbolNode, y::Symbol)     = is(x.name,y)
 isequal(x::Symbol    , y::SymbolNode) = is(x,y.name)
+isequal(x::AssignNode, y::AssignNode) =
+    isequal(x.lhs,y.lhs) && isequal(x.rhs,y.rhs)
+isequal(x::ReturnNode, y::ReturnNode) = isequal(x.expr,y.expr)
 
 ## misc syntax ##
 

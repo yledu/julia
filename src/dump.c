@@ -839,6 +839,7 @@ void jl_init_serializer(void)
                      jl_typename_type, jl_lambda_info_type, jl_tvar_type,
                      jl_labelnode_type, jl_linenumbernode_type,
                      jl_gotonode_type, jl_quotenode_type, jl_topnode_type,
+                     jl_assignnode_type, jl_returnnode_type,
 
                      jl_null, jl_any_type, jl_symbol("Any"),
                      jl_symbol("Array"), jl_symbol("TypeVar"),
@@ -881,7 +882,8 @@ void jl_init_serializer(void)
                      jl_task_type->name,
                      jl_labelnode_type->name, jl_linenumbernode_type->name,
                      jl_gotonode_type->name, jl_quotenode_type->name,
-                     jl_topnode_type->name,
+                     jl_topnode_type->name, jl_assignnode_type->name,
+                     jl_returnnode_type->name,
 
                      jl_root_task,
 

@@ -1531,8 +1531,8 @@ macro parallel(args...)
     if !isa(loop,Expr) || !is(loop.head,:for)
         error("malformed @parallel loop")
     end
-    var = loop.args[1].args[1]
-    r = loop.args[1].args[2]
+    var = loop.args[1].lhs
+    r = loop.args[1].rhs
     body = loop.args[2]
     if na==1
         quote

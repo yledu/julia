@@ -869,5 +869,5 @@ end
 * make default constructors use field types as argument types
 - move more of the repl to julia
 
-- make control-C on client while evaluating input wake up the root task
+* make control-C on client while evaluating input wake up the root task
   with an InterruptException if it is waiting for something.

@@ -2234,6 +2234,8 @@ static jl_tuple_t *jl_typevars(size_t n, ...)
 
 JL_CALLABLE(jl_f_new_expr);
 JL_CALLABLE(jl_f_new_box);
+JL_CALLABLE(jl_f_new_assignnode);
+JL_CALLABLE(jl_f_new_returnnode);
 
 extern void jl_init_int32_int64_cache(void);
 
@@ -2493,6 +2495,20 @@ void jl_init_types(void)
                            jl_any_type, jl_null,
                            jl_tuple(2, jl_symbol("name"), jl_symbol("typ")),
                            jl_tuple(2, jl_sym_type, jl_any_type));
+
+    jl_assignnode_type =
+        jl_new_struct_type(jl_symbol("AssignNode"),
+                           jl_any_type, jl_null,
+                           jl_tuple(2, jl_symbol("lhs"), jl_symbol("rhs")),
+                           jl_tuple(2, jl_any_type, jl_any_type));
+    jl_assignnode_type->fptr = jl_f_new_assignnode;
+
+    jl_returnnode_type =
+        jl_new_struct_type(jl_symbol("ReturnNode"),
+                           jl_any_type, jl_null,
+                           jl_tuple(1, jl_symbol("expr")),
+                           jl_tuple(1, jl_any_type));
+    jl_returnnode_type->fptr = jl_f_new_returnnode;
 
     jl_lambda_info_type =
         jl_new_struct_type(jl_symbol("LambdaStaticData"),

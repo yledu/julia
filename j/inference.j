@@ -685,17 +685,18 @@ end
 
 interpret(e, vtypes, sv::StaticVarInfo) = vtypes
 
+function interpret(e::AssignNode, vtypes, sv::StaticVarInfo)
+    t = abstract_eval(e.rhs, vtypes, sv)
+    lhs = e.lhs
+    if isa(lhs,SymbolNode)
+        lhs = lhs.name
+    end
+    assert(isa(lhs,Symbol), "inference.j:579")
+    return StateUpdate(lhs, t, vtypes)
+end
+
 function interpret(e::Expr, vtypes, sv::StaticVarInfo)
-    # handle assignment
-    if is(e.head,:(=))
-        t = abstract_eval(e.args[2], vtypes, sv)
-        lhs = e.args[1]
-        if isa(lhs,SymbolNode)
-            lhs = lhs.name
-        end
-        assert(isa(lhs,Symbol), "inference.j:579")
-        return StateUpdate(lhs, t, vtypes)
-    elseif is(e.head,:call) || is(e.head,:call1)
+    if is(e.head,:call) || is(e.head,:call1)
         abstract_eval(e, vtypes, sv)
     elseif is(e.head,:gotoifnot)
         abstract_eval(e.args[1], vtypes, sv)
@@ -1010,6 +1011,37 @@ function typeinf(linfo::LambdaStaticData,atypes::Tuple,sparams::Tuple, def, cop)
             pc´ = pc+1
             if isa(stmt,GotoNode)
                 pc´ = findlabel(body,stmt.label)
+            elseif isa(stmt,ReturnNode)
+                pc´ = n+1
+                rt = abstract_eval(stmt.expr, s[pc], sv)
+                if frame.recurred
+                    if isa(frame.prev,CallStack) && frame.prev.recurred
+                        rec = true
+                    end
+                    add(recpts, pc)
+                    #if dbg
+                    #    show(pc); print(" recurred\n")
+                    #end
+                    frame.recurred = false
+                end
+                #if dbg
+                #    print("at "); show(pc)
+                #    print(" result is "); show(frame.result)
+                #    print(" and rt is "); show(rt)
+                #    print("\n")
+                #end
+                if tchanged(rt, frame.result)
+                    frame.result = tmerge(frame.result, rt)
+                    # revisit states that recursively depend on this
+                    for r=recpts
+                        #if dbg
+                        #    print("will revisit ")
+                        #    show(r)
+                        #    print("\n")
+                        #end
+                        add(W,r)
+                    end
+                end
             elseif isa(stmt,Expr)
                 hd = stmt.head
                 if is(hd,:gotoifnot)
@@ -1025,37 +1057,6 @@ function typeinf(linfo::LambdaStaticData,atypes::Tuple,sparams::Tuple, def, cop)
                         if stchanged(changes, s[l], vars)
                             add(W, l)
                             s[l] = stupdate(s[l], changes, vars)
-                        end
-                    end
-                elseif is(hd,:return)
-                    pc´ = n+1
-                    rt = abstract_eval(stmt.args[1], s[pc], sv)
-                    if frame.recurred
-                        if isa(frame.prev,CallStack) && frame.prev.recurred
-                            rec = true
-                        end
-                        add(recpts, pc)
-                        #if dbg
-                        #    show(pc); print(" recurred\n")
-                        #end
-                        frame.recurred = false
-                    end
-                    #if dbg
-                    #    print("at "); show(pc)
-                    #    print(" result is "); show(frame.result)
-                    #    print(" and rt is "); show(rt)
-                    #    print("\n")
-                    #end
-                    if tchanged(rt, frame.result)
-                        frame.result = tmerge(frame.result, rt)
-                        # revisit states that recursively depend on this
-                        for r=recpts
-                            #if dbg
-                            #    print("will revisit ")
-                            #    show(r)
-                            #    print("\n")
-                            #end
-                            add(W,r)
                         end
                     end
                 elseif is(hd,:enter)
@@ -1113,32 +1114,38 @@ function eval_annotate(e::Expr, vtypes, sv, decls, clo)
     head = e.head
     if is(head,:static_typeof) || is(head,:line) || is(head,:const)
         return e
-    elseif is(head,:gotoifnot) || is(head,:return)
+    elseif is(head,:gotoifnot)
         e.typ = Any
-    elseif is(head,:(=))
-        e.typ = Any
-        s = e.args[1]
-        # assignment LHS not subject to all-same-type variable checking,
-        # but the type of the RHS counts as one of its types.
-        if isa(s,SymbolNode)
-            s.typ = abstract_eval(s.name, vtypes, sv)
-            s = s.name
-        else
-            e.args[1] = SymbolNode(s, abstract_eval(s, vtypes, sv))
-        end
-        e.args[2] = eval_annotate(e.args[2], vtypes, sv, decls, clo)
-        # TODO: if this def does not reach any uses, maybe don't do this
-        rhstype = exprtype(e.args[2])
-        if !is(rhstype,None)
-            record_var_type(s, rhstype, decls)
-        end
-        return e
     end
     i0 = is(head,:method) ? 2 : 1
     for i=i0:length(e.args)
         e.args[i] = eval_annotate(e.args[i], vtypes, sv, decls, clo)
     end
     e
+end
+
+function eval_annotate(e::ReturnNode, vtypes, sv, decls, clo)
+    e.expr = eval_annotate(e.expr, vtypes, sv, decls, clo)
+    e
+end
+
+function eval_annotate(e::AssignNode, vtypes, sv, decls, clo)
+    s = e.lhs
+    # assignment LHS not subject to all-same-type variable checking,
+    # but the type of the RHS counts as one of its types.
+    if isa(s,SymbolNode)
+        s.typ = abstract_eval(s.name, vtypes, sv)
+        s = s.name
+    else
+        e.lhs = SymbolNode(s, abstract_eval(s, vtypes, sv))
+    end
+    e.rhs = eval_annotate(e.rhs, vtypes, sv, decls, clo)
+    # TODO: if this def does not reach any uses, maybe don't do this
+    rhstype = exprtype(e.rhs)
+    if !is(rhstype,None)
+        record_var_type(s, rhstype, decls)
+    end
+    return e
 end
 
 function eval_annotate(e::Symbol, vtypes, sv, decls, clo)
@@ -1336,8 +1343,7 @@ function inlineable(f, e::Expr, vars)
     if length(body) > 1
         return NF
     end
-    assert(isa(body[1],Expr), "inference.j:1050")
-    assert(is(body[1].head,:return), "inference.j:1051")
+    assert(isa(body[1],ReturnNode), "inference.j:1339")
     # check for vararg function
     args = f_argnames(ast)
     na = length(args)
@@ -1346,7 +1352,7 @@ function inlineable(f, e::Expr, vars)
     end
     # see if each argument occurs only once in the body expression
     # TODO: make sure side effects aren't skipped if argument doesn't occur
-    expr = body[1].args[1]
+    expr = body[1].expr
     for i=1:length(args)
         a = args[i]
         occ = occurs_more(expr, x->is(x,a), 1)
@@ -1387,13 +1393,27 @@ function remove_call1(e)
         if is(e.head,:call1)
             e.head = :call
         end
+    elseif isa(e,ReturnNode)
+        e.expr = remove_call1(e.expr)
+    elseif isa(e,AssignNode)
+        e.rhs = remove_call1(e.rhs)
     end
     e
 end
 
-inlining_pass(x, vars) = x
-
-function inlining_pass(e::Expr, vars)
+function inlining_pass(x, vars)
+    if isa(x,ReturnNode)
+        x.expr = inlining_pass(x.expr, vars)
+        return x
+    end
+    if isa(x,AssignNode)
+        x.rhs = inlining_pass(x.rhs, vars)
+        return x
+    end
+    if !isa(x,Expr)
+        return x
+    end
+    e = x::Expr
     # don't inline first argument of ccall, as this needs to be evaluated
     # by the interpreter and inlining might put in something it can't handle,
     # like another ccall.
@@ -1488,11 +1508,11 @@ function tuple_elim_pass(ast::Expr)
             i_start = i
             ret = body[i+1]
             # look for t = top(tuple)(...)
-            if isa(ret,Expr) && is(ret.head,:(=))
-                rhs = ret.args[2]
+            if isa(ret,AssignNode)
+                rhs = ret.rhs
                 if isa(rhs,Expr) && is_top_call(rhs,:tuple)
                     tup = rhs.args
-                    tupname = ret.args[1]
+                    tupname = ret.lhs
                     nv = length(tup)-1
                     if nv > 0
                         del(body, i)  # remove (multiple_value)
@@ -1502,7 +1522,7 @@ function tuple_elim_pass(ast::Expr)
                         # to local variables
                         for j=1:nv
                             tupelt = tup[j+1]
-                            tmp = Expr(:(=), {vals[j],tupelt}, Any)
+                            tmp = AssignNode(vals[j], tupelt)
                             add_variable(ast, vals[j], exprtype(tupelt))
                             insert(body, i+j-1, tmp)
                         end
@@ -1511,8 +1531,8 @@ function tuple_elim_pass(ast::Expr)
                         j = 1; k = 1
                         while k <= nv
                             stmt = body[i+j-1]
-                            if isa(stmt,Expr) && is(stmt.head,:(=))
-                                rhs = stmt.args[2]
+                            if isa(stmt,AssignNode)
+                                rhs = stmt.rhs
                                 if isa(rhs,Expr)
                                     if is_top_call(rhs,:tupleref) &&
                                         isequal(rhs.args[2],tupname)
@@ -1520,7 +1540,7 @@ function tuple_elim_pass(ast::Expr)
                                         if isa(r,Symbol)
                                             r = SymbolNode(r, exprtype(tup[k+1]))
                                         end
-                                        stmt.args[2] = r
+                                        stmt.rhs = r
                                         k += 1
                                     elseif is_top_call(rhs,:convert) &&
                                         is_top_call(rhs.args[3],:tupleref) &&

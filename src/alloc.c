@@ -42,6 +42,8 @@ jl_struct_type_t *jl_labelnode_type;
 jl_struct_type_t *jl_gotonode_type;
 jl_struct_type_t *jl_quotenode_type;
 jl_struct_type_t *jl_topnode_type;
+jl_struct_type_t *jl_assignnode_type;
+jl_struct_type_t *jl_returnnode_type;
 jl_bits_type_t *jl_intrinsic_type;
 jl_struct_type_t *jl_methtable_type;
 jl_struct_type_t *jl_lambda_info_type;
@@ -834,4 +836,23 @@ JL_CALLABLE(jl_f_new_box)
     box->type = jl_box_any_type;
     ((jl_value_t**)box)[1] = args[0];
     return box;
+}
+
+JL_CALLABLE(jl_f_new_assignnode)
+{
+    JL_NARGS(AssignNode, 2, 2);
+    jl_value_t *an = (jl_value_t*)alloc_3w();
+    an->type = (jl_type_t*)jl_assignnode_type;
+    ((jl_value_t**)an)[1] = args[0];
+    ((jl_value_t**)an)[2] = args[1];
+    return an;
+}
+
+JL_CALLABLE(jl_f_new_returnnode)
+{
+    JL_NARGS(ReturnNode, 1, 1);
+    jl_value_t *rn = (jl_value_t*)alloc_2w();
+    rn->type = (jl_type_t*)jl_returnnode_type;
+    ((jl_value_t**)rn)[1] = args[0];
+    return rn;
 }

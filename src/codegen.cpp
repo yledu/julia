@@ -573,6 +573,12 @@ static void max_arg_depth(jl_value_t *expr, int32_t *max, int32_t *sp)
             }
         }
     }
+    else if (jl_is_assignnode(expr)) {
+        max_arg_depth(jl_fieldref(expr,1), max, sp);
+    }
+    else if (jl_is_returnnode(expr)) {
+        max_arg_depth(jl_fieldref(expr,0), max, sp);
+    }
 }
 
 static void make_gcroot(Value *v, jl_codectx_t *ctx)
@@ -1176,6 +1182,13 @@ static Value *emit_expr(jl_value_t *expr, jl_codectx_t *ctx, bool value)
         builder.SetInsertPoint(bb);
         return NULL;
     }
+    else if (jl_is_assignnode(expr)) {
+        emit_assignment(jl_fieldref(expr,0), jl_fieldref(expr,1), ctx);
+        if (value) {
+            return literal_pointer_val((jl_value_t*)jl_nothing);
+        }
+        return NULL;
+    }
     else if (jl_is_linenode(expr)) {
         return NULL;
     }
@@ -1263,12 +1276,6 @@ static Value *emit_expr(jl_value_t *expr, jl_codectx_t *ctx, bool value)
         return emit_call(args, ex->args->length, ctx);
     }
 
-    else if (ex->head == assign_sym) {
-        emit_assignment(args[0], args[1], ctx);
-        if (value) {
-            return literal_pointer_val((jl_value_t*)jl_nothing);
-        }
-    }
     else if (ex->head == method_sym) {
         jl_value_t *mn;
         if (jl_is_symbolnode(args[0])) {
@@ -1787,9 +1794,8 @@ static void emit_function(jl_lambda_info_t *lam, Function *f)
         else {
             prevlabel = false;
         }
-        if (jl_is_expr(stmt) && ((jl_expr_t*)stmt)->head == return_sym) {
-            jl_expr_t *ex = (jl_expr_t*)stmt;
-            Value *retval = boxed(emit_expr(jl_exprarg(ex,0), &ctx, true));
+        if (jl_is_returnnode(stmt)) {
+            Value *retval = boxed(emit_expr(jl_fieldref(stmt,0), &ctx, true));
 #ifdef JL_GC_MARKSWEEP
             // JL_GC_POP();
             if (n_roots > 0) {

@@ -313,6 +313,8 @@ extern jl_struct_type_t *jl_labelnode_type;
 extern jl_struct_type_t *jl_gotonode_type;
 extern jl_struct_type_t *jl_quotenode_type;
 extern jl_struct_type_t *jl_topnode_type;
+extern jl_struct_type_t *jl_assignnode_type;
+extern jl_struct_type_t *jl_returnnode_type;
 extern jl_bits_type_t *jl_intrinsic_type;
 extern jl_struct_type_t *jl_methtable_type;
 extern jl_struct_type_t *jl_task_type;
@@ -430,6 +432,8 @@ void *allocb_permanent(size_t sz);
 #define jl_is_quotenode(v)   jl_typeis(v,jl_quotenode_type)
 #define jl_is_topnode(v)     jl_typeis(v,jl_topnode_type)
 #define jl_is_linenode(v)    jl_typeis(v,jl_linenumbernode_type)
+#define jl_is_assignnode(v)  jl_typeis(v,jl_assignnode_type)
+#define jl_is_returnnode(v)  jl_typeis(v,jl_returnnode_type)
 #define jl_is_lambda_info(v) jl_typeis(v,jl_lambda_info_type)
 #define jl_is_mtable(v)      jl_typeis(v,jl_methtable_type)
 #define jl_is_task(v)        jl_typeis(v,jl_task_type)
