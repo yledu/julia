@@ -1260,7 +1260,7 @@ static void print_methlist(char *name, jl_methlist_t *ml)
         else {
             jl_lambda_info_t *li = ml->func->linfo;
             if (li != NULL) {
-                long lno = jl_unbox_long(li->line);
+                long lno = jl_unbox_int(li->line);
                 if (lno > 0) {
                     char *fname = ((jl_sym_t*)li->file)->name;
                     char *sep = strrchr(fname, '/');

@@ -108,6 +108,22 @@ convert(::Type{Unsigned}, x::Int64  ) = convert(Uint64, x) # LOSSY
 convert(::Type{Unsigned}, x::Float32) = convert(Uint32, x)
 convert(::Type{Unsigned}, x::Float64) = convert(Uint64, x)
 
+if is64bit()
+    convert(::Type{Int64}, x::Int) = boxsi64(unboxint(x))
+    convert(::Type{Int}, x::Int64) = boxint(unbox64(x))
+else
+    convert(::Type{Int32}, x::Int) = boxsi32(unboxint(x))
+    convert(::Type{Int}, x::Int32) = boxint(unbox32(x))
+end
+
+# to avoid method ambiguities:
+convert(::Type{Int}, x::Int) = x
+convert(::Type{Bool}, x::Int) = (x!=0)
+
+convert(::Type{Int}, x) = convert(Int, convert(Long, x))
+convert{T}(::Type{T}, x::Int) = convert(T, convert(Long, x))
+
+int   (x) = convert(Int,    x)
 int8  (x) = convert(Int8,   x)
 uint8 (x) = convert(Uint8,  x)
 int16 (x) = convert(Int16,  x)
@@ -116,6 +132,9 @@ int32 (x) = convert(Int32,  x)
 uint32(x) = convert(Uint32, x)
 int64 (x) = convert(Int64,  x)
 uint64(x) = convert(Uint64, x)
+
+long(x)  = convert(Long, x)
+ulong(x) = convert(Ulong, x)
 
 integer (x) = convert(Integer,  x)
 unsigned(x) = convert(Unsigned, x)
@@ -137,6 +156,15 @@ ifloor(x::Integer) = x
 iceil(x::Integer)  = x
 
 ## integer promotions ##
+
+promote_rule(::Type{Int}, ::Type{Int8  }) = Int8
+promote_rule(::Type{Int}, ::Type{Uint8 }) = Uint8
+promote_rule(::Type{Int}, ::Type{Int16 }) = Int16
+promote_rule(::Type{Int}, ::Type{Uint16}) = Uint16
+promote_rule(::Type{Int}, ::Type{Int32 }) = Int32
+promote_rule(::Type{Int}, ::Type{Uint32}) = Uint32
+promote_rule(::Type{Int}, ::Type{Int64 }) = Int64
+promote_rule(::Type{Int}, ::Type{Uint64}) = Uint64
 
 promote_rule(::Type{Int16}, ::Type{Int8} ) = Int16
 promote_rule(::Type{Int32}, ::Type{Int8} ) = Int32
@@ -167,23 +195,20 @@ promote_rule(::Type{Uint32}, ::Type{Int16}) = Int64
 promote_rule(::Type{Uint32}, ::Type{Int32}) = Int64
 promote_rule(::Type{Uint32}, ::Type{Int64}) = Int64
 
-promote_rule(::Type{Uint64}, ::Type{Int8} ) = Uint64 # LOSSY
-promote_rule(::Type{Uint64}, ::Type{Int16}) = Uint64 # LOSSY
-promote_rule(::Type{Uint64}, ::Type{Int32}) = Uint64 # LOSSY
-promote_rule(::Type{Uint64}, ::Type{Int64}) = Uint64 # LOSSY
-
 ## integer arithmetic ##
 
+-(x::Int)   = boxint(neg_int(unboxint(x)))
 -(x::Int8 ) = boxsi8 (neg_int(unbox8 (x)))
 -(x::Int16) = boxsi16(neg_int(unbox16(x)))
 -(x::Int32) = boxsi32(neg_int(unbox32(x)))
 -(x::Int64) = boxsi64(neg_int(unbox64(x)))
 
--(x::Uint8 ) = boxsi16(neg_int(zext16(unbox8 (x))))
--(x::Uint16) = boxsi32(neg_int(zext32(unbox16(x))))
--(x::Uint32) = boxsi64(neg_int(zext64(unbox32(x))))
--(x::Uint64) = boxsi64(neg_int(unbox64(x))) # LOSSY
+-(x::Uint8 ) = boxui8 (neg_int(unbox8 (x)))
+-(x::Uint16) = boxui16(neg_int(unbox16(x)))
+-(x::Uint32) = boxui32(neg_int(unbox32(x)))
+-(x::Uint64) = boxui64(neg_int(unbox64(x)))
 
++(x::Int  , y::Int  ) = boxint (add_int(unboxint(x),unboxint(y)))
 +(x::Int8 , y::Int8 ) = boxsi8 (add_int(unbox8 (x), unbox8 (y)))
 +(x::Int16, y::Int16) = boxsi16(add_int(unbox16(x), unbox16(y)))
 +(x::Int32, y::Int32) = boxsi32(add_int(unbox32(x), unbox32(y)))
@@ -194,6 +219,7 @@ promote_rule(::Type{Uint64}, ::Type{Int64}) = Uint64 # LOSSY
 +(x::Uint32, y::Uint32) = boxui32(add_int(unbox32(x), unbox32(y)))
 +(x::Uint64, y::Uint64) = boxui64(add_int(unbox64(x), unbox64(y)))
 
+-(x::Int  , y::Int  ) = boxint(sub_int(unboxint(x), unboxint(y)))
 -(x::Int8 , y::Int8 ) = boxsi8 (sub_int(unbox8 (x), unbox8 (y)))
 -(x::Int16, y::Int16) = boxsi16(sub_int(unbox16(x), unbox16(y)))
 -(x::Int32, y::Int32) = boxsi32(sub_int(unbox32(x), unbox32(y)))
@@ -204,6 +230,7 @@ promote_rule(::Type{Uint64}, ::Type{Int64}) = Uint64 # LOSSY
 -(x::Uint32, y::Uint32) = boxui32(sub_int(unbox32(x), unbox32(y)))
 -(x::Uint64, y::Uint64) = boxui64(sub_int(unbox64(x), unbox64(y)))
 
+*(x::Int  , y::Int  ) = boxint(mul_int(unboxint(x), unboxint(y)))
 *(x::Int8 , y::Int8 ) = boxsi8 (mul_int(unbox8 (x), unbox8 (y)))
 *(x::Int16, y::Int16) = boxsi16(mul_int(unbox16(x), unbox16(y)))
 *(x::Int32, y::Int32) = boxsi32(mul_int(unbox32(x), unbox32(y)))
@@ -216,6 +243,7 @@ promote_rule(::Type{Uint64}, ::Type{Int64}) = Uint64 # LOSSY
 
 /(x::Integer, y::Integer) = float64(x)/float64(y)
 
+div(x::Int  , y::Int  ) = boxint(sdiv_int(unboxint(x), unboxint(y)))
 div(x::Int8 , y::Int8 ) = boxsi8 (sdiv_int(unbox8 (x), unbox8 (y)))
 div(x::Int16, y::Int16) = boxsi16(sdiv_int(unbox16(x), unbox16(y)))
 div(x::Int32, y::Int32) = boxsi32(sdiv_int(unbox32(x), unbox32(y)))
@@ -229,6 +257,7 @@ div(x::Uint64, y::Uint64) = boxui64(udiv_int(unbox64(x), unbox64(y)))
 fld{T<:Unsigned}(x::T, y::T) = div(x,y)
 # TODO: faster signed integer fld?
 
+rem(x::Int  , y::Int  ) = boxint(srem_int(unboxint(x), unboxint(y)))
 rem(x::Int8 , y::Int8 ) = boxsi8 (srem_int(unbox8 (x), unbox8 (y)))
 rem(x::Int16, y::Int16) = boxsi16(srem_int(unbox16(x), unbox16(y)))
 rem(x::Int32, y::Int32) = boxsi32(srem_int(unbox32(x), unbox32(y)))
@@ -244,6 +273,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 
 ## integer bitwise operations ##
 
+~(x::Int  ) = boxint(not_int(unboxint(x)))
 ~(x::Int8 ) = boxsi8 (not_int(unbox8 (x)))
 ~(x::Int16) = boxsi16(not_int(unbox16(x)))
 ~(x::Int32) = boxsi32(not_int(unbox32(x)))
@@ -254,6 +284,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 ~(x::Uint32) = boxui32(not_int(unbox32(x)))
 ~(x::Uint64) = boxui64(not_int(unbox64(x)))
 
+&(x::Int  , y::Int  ) = boxint(and_int(unboxint(x), unboxint(y)))
 &(x::Int8 , y::Int8 ) = boxsi8 (and_int(unbox8 (x), unbox8 (y)))
 &(x::Int16, y::Int16) = boxsi16(and_int(unbox16(x), unbox16(y)))
 &(x::Int32, y::Int32) = boxsi32(and_int(unbox32(x), unbox32(y)))
@@ -264,6 +295,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 &(x::Uint32, y::Uint32) = boxui32(and_int(unbox32(x), unbox32(y)))
 &(x::Uint64, y::Uint64) = boxui64(and_int(unbox64(x), unbox64(y)))
 
+|(x::Int  , y::Int  ) = boxint(or_int(unboxint(x), unboxint(y)))
 |(x::Int8 , y::Int8 ) = boxsi8 (or_int(unbox8 (x), unbox8 (y)))
 |(x::Int16, y::Int16) = boxsi16(or_int(unbox16(x), unbox16(y)))
 |(x::Int32, y::Int32) = boxsi32(or_int(unbox32(x), unbox32(y)))
@@ -274,6 +306,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 |(x::Uint32, y::Uint32) = boxui32(or_int(unbox32(x), unbox32(y)))
 |(x::Uint64, y::Uint64) = boxui64(or_int(unbox64(x), unbox64(y)))
 
+($)(x::Int  , y::Int  ) = boxint(xor_int(unboxint(x), unboxint(y)))
 ($)(x::Int8 , y::Int8 ) = boxsi8 (xor_int(unbox8 (x), unbox8 (y)))
 ($)(x::Int16, y::Int16) = boxsi16(xor_int(unbox16(x), unbox16(y)))
 ($)(x::Int32, y::Int32) = boxsi32(xor_int(unbox32(x), unbox32(y)))
@@ -284,6 +317,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 ($)(x::Uint32, y::Uint32) = boxui32(xor_int(unbox32(x), unbox32(y)))
 ($)(x::Uint64, y::Uint64) = boxui64(xor_int(unbox64(x), unbox64(y)))
 
+<<(x::Int  , y::Int32) = boxint(shl_int(unboxint(x), unbox32(y)))
 <<(x::Int8 , y::Int32) = boxsi8 (shl_int(unbox8 (x), unbox32(y)))
 <<(x::Int16, y::Int32) = boxsi16(shl_int(unbox16(x), unbox32(y)))
 <<(x::Int32, y::Int32) = boxsi32(shl_int(unbox32(x), unbox32(y)))
@@ -294,6 +328,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 <<(x::Uint32, y::Int32) = boxui32(shl_int(unbox32(x), unbox32(y)))
 <<(x::Uint64, y::Int32) = boxui64(shl_int(unbox64(x), unbox32(y)))
 
+>>(x::Int  , y::Int32) = boxint(ashr_int(unboxint(x), unbox32(y)))
 >>(x::Int8 , y::Int32) = boxsi8 (ashr_int(unbox8 (x), unbox32(y)))
 >>(x::Int16, y::Int32) = boxsi16(ashr_int(unbox16(x), unbox32(y)))
 >>(x::Int32, y::Int32) = boxsi32(ashr_int(unbox32(x), unbox32(y)))
@@ -304,6 +339,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 >>(x::Uint32, y::Int32) = boxui32(lshr_int(unbox32(x), unbox32(y)))
 >>(x::Uint64, y::Int32) = boxui64(lshr_int(unbox64(x), unbox32(y)))
 
+>>>(x::Int  , y::Int32) = boxint(lshr_int(unboxint(x), unbox32(y)))
 >>>(x::Int8 , y::Int32) = boxsi8 (lshr_int(unbox8 (x), unbox32(y)))
 >>>(x::Int16, y::Int32) = boxsi16(lshr_int(unbox16(x), unbox32(y)))
 >>>(x::Int32, y::Int32) = boxsi32(lshr_int(unbox32(x), unbox32(y)))
@@ -314,6 +350,7 @@ mod{T<:Integer }(x::T, y::T) = rem(y+rem(x,y),y)
 >>>(x::Uint32, y::Int32) = boxui32(lshr_int(unbox32(x), unbox32(y)))
 >>>(x::Uint64, y::Int32) = boxui64(lshr_int(unbox64(x), unbox32(y)))
 
+bswap(x::Int)    = convert(Int,bswap(convert(Long,x)))
 bswap(x::Int8)   = x
 bswap(x::Uint8)  = x
 bswap(x::Int16)  = boxsi16(bswap_int(unbox16(x)))
@@ -323,6 +360,7 @@ bswap(x::Uint32) = boxui32(bswap_int(unbox32(x)))
 bswap(x::Int64)  = boxsi64(bswap_int(unbox64(x)))
 bswap(x::Uint64) = boxui64(bswap_int(unbox64(x)))
 
+count_ones(x::Int)    = boxint(ctpop_int(unboxint(x)))
 count_ones(x::Int8)   = boxsi8 (ctpop_int(unbox8 (x)))
 count_ones(x::Uint8)  = boxui8 (ctpop_int(unbox8 (x)))
 count_ones(x::Int16)  = boxsi16(ctpop_int(unbox16(x)))
@@ -332,6 +370,7 @@ count_ones(x::Uint32) = boxui32(ctpop_int(unbox32(x)))
 count_ones(x::Int64)  = boxsi64(ctpop_int(unbox64(x)))
 count_ones(x::Uint64) = boxui64(ctpop_int(unbox64(x)))
 
+leading_zeros(x::Int)    = boxint(ctlz_int(unboxint(x)))
 leading_zeros(x::Int8)   = boxsi8 (ctlz_int(unbox8 (x)))
 leading_zeros(x::Uint8)  = boxui8 (ctlz_int(unbox8 (x)))
 leading_zeros(x::Int16)  = boxsi16(ctlz_int(unbox16(x)))
@@ -341,6 +380,7 @@ leading_zeros(x::Uint32) = boxui32(ctlz_int(unbox32(x)))
 leading_zeros(x::Int64)  = boxsi64(ctlz_int(unbox64(x)))
 leading_zeros(x::Uint64) = boxui64(ctlz_int(unbox64(x)))
 
+trailing_zeros(x::Int)    = boxint(cttz_int(unboxint(x)))
 trailing_zeros(x::Int8)   = boxsi8 (cttz_int(unbox8 (x)))
 trailing_zeros(x::Uint8)  = boxui8 (cttz_int(unbox8 (x)))
 trailing_zeros(x::Int16)  = boxsi16(cttz_int(unbox16(x)))
@@ -352,6 +392,7 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 
 ## integer comparisons ##
 
+==(x::Int  , y::Int  ) = eq_int(unboxint(x),unboxint(y))
 ==(x::Int8 , y::Int8 ) = eq_int(unbox8 (x),unbox8 (y))
 ==(x::Int16, y::Int16) = eq_int(unbox16(x),unbox16(y))
 ==(x::Int32, y::Int32) = eq_int(unbox32(x),unbox32(y))
@@ -362,6 +403,7 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 ==(x::Uint32, y::Uint32) = eq_int(unbox32(x),unbox32(y))
 ==(x::Uint64, y::Uint64) = eq_int(unbox64(x),unbox64(y))
 
+!=(x::Int  , y::Int  ) = ne_int(unboxint(x),unboxint(y))
 !=(x::Int8 , y::Int8 ) = ne_int(unbox8 (x),unbox8 (y))
 !=(x::Int16, y::Int16) = ne_int(unbox16(x),unbox16(y))
 !=(x::Int32, y::Int32) = ne_int(unbox32(x),unbox32(y))
@@ -372,6 +414,7 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 !=(x::Uint32, y::Uint32) = ne_int(unbox32(x),unbox32(y))
 !=(x::Uint64, y::Uint64) = ne_int(unbox64(x),unbox64(y))
 
+<(x::Int  , y::Int  ) = slt_int(unboxint(x),unboxint(y))
 <(x::Int8 , y::Int8 ) = slt_int(unbox8 (x),unbox8 (y))
 <(x::Int16, y::Int16) = slt_int(unbox16(x),unbox16(y))
 <(x::Int32, y::Int32) = slt_int(unbox32(x),unbox32(y))
@@ -382,6 +425,7 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 <(x::Uint32, y::Uint32) = ult_int(unbox32(x),unbox32(y))
 <(x::Uint64, y::Uint64) = ult_int(unbox64(x),unbox64(y))
 
+<=(x::Int  , y::Int  ) = sle_int(unboxint(x),unboxint(y))
 <=(x::Int8 , y::Int8 ) = sle_int(unbox8 (x),unbox8 (y))
 <=(x::Int16, y::Int16) = sle_int(unbox16(x),unbox16(y))
 <=(x::Int32, y::Int32) = sle_int(unbox32(x),unbox32(y))
@@ -394,6 +438,8 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 
 ## traits ##
 
+typemin(::Type{Int   }) = typemin(Long)
+typemax(::Type{Int   }) = typemax(Long)
 typemin(::Type{Int8  }) = int8(-128)
 typemax(::Type{Int8  }) = int8(127)
 typemin(::Type{Uint8 }) = uint8(0)
@@ -411,6 +457,7 @@ typemax(::Type{Int64 }) = 9223372036854775807
 typemin(::Type{Uint64}) = uint64(0)
 typemax(::Type{Uint64}) = 18446744073709551615
 
+sizeof(::Type{Int})    = sizeof(Long)
 sizeof(::Type{Int8})   = 1
 sizeof(::Type{Uint8})  = 1
 sizeof(::Type{Int16})  = 2
