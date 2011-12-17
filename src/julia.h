@@ -9,6 +9,16 @@
 #include "arraylist.h"
 #include <setjmp.h>
 
+#ifndef ulong
+#define ulong size_t
+#endif
+
+#ifdef __LP64__
+#define WORD_SIZE 64
+#else
+#define WORD_SIZE 32
+#endif
+
 #define JL_STRUCT_TYPE \
     struct _jl_type_t *type;
 
@@ -293,6 +303,7 @@ extern jl_typename_t *jl_box_typename;
 
 extern jl_bits_type_t *jl_bool_type;
 extern jl_bits_type_t *jl_char_type;
+extern jl_bits_type_t *jl_int_type;
 extern jl_bits_type_t *jl_int8_type;
 extern jl_bits_type_t *jl_uint8_type;
 extern jl_bits_type_t *jl_int16_type;
@@ -395,9 +406,9 @@ void *allocb_permanent(size_t sz);
 
 #define jl_symbolnode_sym(s) ((jl_sym_t*)jl_fieldref(s,0))
 #define jl_symbolnode_type(s) (jl_fieldref(s,1))
-#define jl_linenode_line(x) jl_unbox_long(jl_fieldref(x,0))
-#define jl_labelnode_label(x) jl_unbox_long(jl_fieldref(x,0))
-#define jl_gotonode_label(x) jl_unbox_long(jl_fieldref(x,0))
+#define jl_linenode_line(x) jl_unbox_int(jl_fieldref(x,0))
+#define jl_labelnode_label(x) jl_unbox_int(jl_fieldref(x,0))
+#define jl_gotonode_label(x) jl_unbox_int(jl_fieldref(x,0))
 
 #define jl_tparam0(t) jl_tupleref(((jl_tag_type_t*)(t))->parameters, 0)
 #define jl_tparam1(t) jl_tupleref(((jl_tag_type_t*)(t))->parameters, 1)
@@ -418,8 +429,13 @@ void *allocb_permanent(size_t sz);
 #define jl_is_typector(v)    jl_typeis(v,jl_typector_type)
 #define jl_is_TypeConstructor(v)    jl_typeis(v,jl_typector_type)
 #define jl_is_typename(v)    jl_typeis(v,jl_typename_type)
+#define jl_is_int(v)         jl_typeis(v,jl_int_type)
+#define jl_is_int8(v)        jl_typeis(v,jl_int8_type)
+#define jl_is_int16(v)       jl_typeis(v,jl_int16_type)
 #define jl_is_int32(v)       jl_typeis(v,jl_int32_type)
 #define jl_is_int64(v)       jl_typeis(v,jl_int64_type)
+#define jl_is_uint8(v)       jl_typeis(v,jl_uint8_type)
+#define jl_is_uint16(v)      jl_typeis(v,jl_uint16_type)
 #define jl_is_uint32(v)      jl_typeis(v,jl_uint32_type)
 #define jl_is_uint64(v)      jl_typeis(v,jl_uint64_type)
 #define jl_is_float32(v)     jl_typeis(v,jl_float32_type)
@@ -577,14 +593,16 @@ void jl_initialize_generic_function(jl_function_t *f, jl_sym_t *name);
 void jl_add_method(jl_function_t *gf, jl_tuple_t *types, jl_function_t *meth);
 jl_value_t *jl_method_def(jl_sym_t *name, jl_value_t **bp, jl_binding_t *bnd,
                           jl_tuple_t *argtypes, jl_function_t *f);
+
 jl_value_t *jl_box_bool(int8_t x);
+jl_value_t *jl_box_char(uint32_t x);
+jl_value_t *jl_box_int(long x);
 jl_value_t *jl_box_int8(int32_t x);
 jl_value_t *jl_box_uint8(uint32_t x);
 jl_value_t *jl_box_int16(int16_t x);
 jl_value_t *jl_box_uint16(uint16_t x);
 DLLEXPORT jl_value_t *jl_box_int32(int32_t x);
 jl_value_t *jl_box_uint32(uint32_t x);
-jl_value_t *jl_box_char(uint32_t x);
 jl_value_t *jl_new_box_int8(int8_t x);
 jl_value_t *jl_new_box_int32(int32_t x);
 jl_value_t *jl_box_int64(int64_t x);
@@ -596,6 +614,7 @@ jl_value_t *jl_box16(jl_bits_type_t *t, int16_t x);
 jl_value_t *jl_box32(jl_bits_type_t *t, int32_t x);
 jl_value_t *jl_box64(jl_bits_type_t *t, int64_t x);
 int8_t jl_unbox_bool(jl_value_t *v);
+long jl_unbox_int(jl_value_t *v);
 int8_t jl_unbox_int8(jl_value_t *v);
 uint8_t jl_unbox_uint8(jl_value_t *v);
 int16_t jl_unbox_int16(jl_value_t *v);
@@ -606,18 +625,6 @@ int64_t jl_unbox_int64(jl_value_t *v);
 uint64_t jl_unbox_uint64(jl_value_t *v);
 float jl_unbox_float32(jl_value_t *v);
 double jl_unbox_float64(jl_value_t *v);
-
-#ifdef __LP64__
-#define jl_box_long(x)   jl_box_int64(x)
-#define jl_unbox_long(x) jl_unbox_int64(x)
-#define jl_is_long(x)    jl_is_int64(x)
-#define jl_long_type     jl_int64_type
-#else
-#define jl_box_long(x)   jl_box_int32(x)
-#define jl_unbox_long(x) jl_unbox_int32(x)
-#define jl_is_long(x)    jl_is_int32(x)
-#define jl_long_type     jl_int32_type
-#endif
 
 // arrays
 DLLEXPORT jl_array_t *jl_new_array(jl_type_t *atype, jl_tuple_t *dims);
@@ -764,17 +771,17 @@ jl_value_t *jl_uncompress_ast(jl_tuple_t *data);
 
 static inline int jl_vinfo_capt(jl_array_t *vi)
 {
-    return (jl_unbox_long(jl_cellref(vi,2))&1)!=0;
+    return (jl_unbox_int(jl_cellref(vi,2))&1)!=0;
 }
 
 static inline int jl_vinfo_assigned(jl_array_t *vi)
 {
-    return (jl_unbox_long(jl_cellref(vi,2))&2)!=0;
+    return (jl_unbox_int(jl_cellref(vi,2))&2)!=0;
 }
 
 static inline int jl_vinfo_assigned_inner(jl_array_t *vi)
 {
-    return (jl_unbox_long(jl_cellref(vi,2))&4)!=0;
+    return (jl_unbox_int(jl_cellref(vi,2))&4)!=0;
 }
 
 // for writing julia functions in C

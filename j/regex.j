@@ -98,8 +98,8 @@ function match(re::Regex, str::ByteString, offset::Integer, opts::Integer)
     if isempty(m); return nothing; end
     mat = str[m[1]+1:m[2]]
     cap = ntuple(n, i->(m[2i+1] < 0 ? nothing : str[m[2i+1]+1:m[2i+2]]))
-    off = map(i->m[2i+1]+1, [1:n])
-    RegexMatch(mat, cap, m[1]+1, off)
+    off = map(i->int(m[2i+1]+1), [1:n])
+    RegexMatch(mat, cap, int(m[1]+1), off)
 end
 match(r::Regex, s::String, o::Integer, p::Integer) = match(r, cstring(s), o, p)
 match(r::Regex, s::String, o::Integer) = match(r, s, o, r.options & PCRE_EXECUTE_MASK)

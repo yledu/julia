@@ -9,7 +9,7 @@ const _jl_ser_tag = IdTable()
 const _jl_deser_tag = IdTable()
 let i = 2
     global _jl_ser_tag, _jl_deser_tag
-    for t = {Symbol, Int8, Uint8, Int16, Uint16, Int32, Uint32,
+    for t = {Symbol, Int, Int8, Uint8, Int16, Uint16, Int32, Uint32,
              Int64, Uint64, Float32, Float64, Char, Ptr,
              AbstractKind, UnionKind, BitsKind, CompositeKind, FuncKind,
              Tuple, Array, Expr, LongSymbol, LongTuple, LongExpr,

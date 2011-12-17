@@ -134,7 +134,7 @@ void julia_init(char *imageFile)
         jl_array_uint8_type =
             (jl_type_t*)jl_apply_type((jl_value_t*)jl_array_type,
                                       jl_tuple2(jl_uint8_type,
-                                                jl_box_long(1)));
+                                                jl_box_int(1)));
         jl_boot_file_loaded = 1;
         jl_init_builtins();
         jl_init_box_caches();
@@ -257,7 +257,7 @@ DLLEXPORT void jl_enable_inference(void)
             (jl_function_t*)*(jl_get_bindingp(jl_system_module,
                                               jl_symbol("typeinf_ext")));
         // warm up type inference to put the latency up front
-        jl_value_t *one = jl_box_long(1);
+        jl_value_t *one = jl_box_int(1);
         jl_apply((jl_function_t*)*(jl_get_bindingp(jl_system_module,
                                                    jl_symbol("+"))),
                  &one, 1);
@@ -296,11 +296,14 @@ void jl_get_builtin_hooks(void)
     jl_root_task->tls = jl_nothing;
 
     jl_char_type    = (jl_bits_type_t*)global("Char");
+    jl_int_type     = (jl_bits_type_t*)global("Int");
     jl_int8_type    = (jl_bits_type_t*)global("Int8");
     jl_uint8_type   = (jl_bits_type_t*)global("Uint8");
     jl_int16_type   = (jl_bits_type_t*)global("Int16");
     jl_uint16_type  = (jl_bits_type_t*)global("Uint16");
+    jl_int32_type   = (jl_bits_type_t*)global("Int32");
     jl_uint32_type  = (jl_bits_type_t*)global("Uint32");
+    jl_int64_type   = (jl_bits_type_t*)global("Int64");
     jl_uint64_type  = (jl_bits_type_t*)global("Uint64");
 
     jl_float32_type = (jl_bits_type_t*)global("Float32");

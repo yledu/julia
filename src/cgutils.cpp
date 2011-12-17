@@ -32,11 +32,9 @@ static GlobalVariable *stringConst(const std::string &txt)
 static Value *literal_pointer_val(void *p, Type *t)
 {
 #ifdef __LP64__
-    return ConstantExpr::getIntToPtr(ConstantInt::get(T_int64, (uint64_t)p),
-                                     t);
+    return ConstantExpr::getIntToPtr(ConstantInt::get(T_int64, (uint64_t)p), t);
 #else
-    return ConstantExpr::getIntToPtr(ConstantInt::get(T_int32, (uint32_t)p),
-                                     t);
+    return ConstantExpr::getIntToPtr(ConstantInt::get(T_int32, (uint32_t)p), t);
 #endif
 }
 
@@ -59,9 +57,7 @@ static Value *emit_typeof(Value *p)
     // given p, a jl_value_t*, compute its type tag
     if (p->getType() == jl_pvalue_llvmt) {
         Value *tt = builder.CreateBitCast(p, jl_ppvalue_llvmt);
-        tt = builder.
-            CreateLoad(builder.CreateGEP(tt,ConstantInt::get(T_int32,0)),
-                       false);
+        tt = builder.CreateLoad(builder.CreateGEP(tt,ConstantInt::get(T_int32,0)), false);
         return tt;
     }
     return literal_pointer_val(llvm_type_to_julia(p->getType()));
@@ -349,8 +345,11 @@ static jl_value_t *julia_type_of(Value *v)
 static bool is_julia_type_representable(jl_value_t *jt)
 {
     return
-        (jt == (jl_value_t*)jl_bool_type || jt == (jl_value_t*)jl_int8_type ||
-         jt == (jl_value_t*)jl_int16_type || jt == (jl_value_t*)jl_int32_type ||
+        (jt == (jl_value_t*)jl_bool_type ||
+         jt == (jl_value_t*)jl_int_type ||
+         jt == (jl_value_t*)jl_int8_type ||
+         jt == (jl_value_t*)jl_int16_type ||
+         jt == (jl_value_t*)jl_int32_type ||
          jt == (jl_value_t*)jl_int64_type ||
          jt == (jl_value_t*)jl_float32_type ||
          jt == (jl_value_t*)jl_float64_type ||
@@ -479,21 +478,22 @@ static Value *boxed(Value *v)
     if (t == T_int1) return julia_bool(v);
     jl_value_t *jt = julia_type_of(v);
     jl_bits_type_t *jb = (jl_bits_type_t*)jt;
+    if (jb == jl_char_type) return builder.CreateCall(box_char_func, v);
+    if (jb == jl_int_type) return builder.CreateCall(box_int_func, v);
     if (jb == jl_int8_type)
         return builder.CreateCall(box_int8_func,
                                   builder.CreateSExt(v, T_int32));
     if (jb == jl_int16_type) return builder.CreateCall(box_int16_func, v);
     if (jb == jl_int32_type) return builder.CreateCall(box_int32_func, v);
     if (jb == jl_int64_type) return builder.CreateCall(box_int64_func, v);
-    if (jb == jl_float32_type) return builder.CreateCall(box_float32_func, v);
-    if (jb == jl_float64_type) return builder.CreateCall(box_float64_func, v);
     if (jb == jl_uint8_type)
         return builder.CreateCall(box_uint8_func,
                                   builder.CreateZExt(v, T_int32));
     if (jb == jl_uint16_type) return builder.CreateCall(box_uint16_func, v);
     if (jb == jl_uint32_type) return builder.CreateCall(box_uint32_func, v);
     if (jb == jl_uint64_type) return builder.CreateCall(box_uint64_func, v);
-    if (jb == jl_char_type)   return builder.CreateCall(box_char_func, v);
+    if (jb == jl_float32_type) return builder.CreateCall(box_float32_func, v);
+    if (jb == jl_float64_type) return builder.CreateCall(box_float64_func, v);
     // TODO: skip the call for constant arguments
     if (jl_is_bits_type(jt)) {
         if (v->getType()->isPointerTy()) {

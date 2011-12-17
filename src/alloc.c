@@ -285,7 +285,7 @@ jl_lambda_info_t *jl_new_lambda_info(jl_value_t *ast, jl_tuple_t *sparams)
         (jl_lambda_info_t*)newobj((jl_type_t*)jl_lambda_info_type, 15);
     li->ast = ast;
     li->file = (jl_value_t*)null_sym;
-    li->line = jl_box_long(0);
+    li->line = jl_box_int(0);
     if (ast != NULL && jl_is_expr(ast)) {
         jl_expr_t *body1 = (jl_expr_t*)jl_exprarg(jl_lam_body((jl_expr_t*)ast),0);
         if (jl_is_expr(body1) && ((jl_expr_t*)body1)->head == line_sym) {
@@ -459,7 +459,7 @@ void jl_add_constructors(jl_struct_type_t *t)
 {
     if (t->name == jl_array_typename) {
         if (!jl_has_typevars(jl_tparam0(t)) &&
-            jl_is_long(jl_tupleref(t->parameters,1)))
+            jl_is_int(jl_tupleref(t->parameters,1)))
             t->fptr = jl_new_array_internal;
         else
             t->fptr = jl_f_no_function;
@@ -548,10 +548,8 @@ jl_bits_type_t *jl_new_bitstype(jl_value_t *name, jl_tag_type_t *super,
     if (!jl_boot_file_loaded && jl_is_symbol(name)) {
         // hack to avoid making two versions of basic types needed
         // during bootstrapping
-        if (!strcmp(((jl_sym_t*)name)->name, "Int32"))
-            t = jl_int32_type;
-        else if (!strcmp(((jl_sym_t*)name)->name, "Int64"))
-            t = jl_int64_type;
+        if (!strcmp(((jl_sym_t*)name)->name, "Int"))
+            t = jl_int_type;
         else if (!strcmp(((jl_sym_t*)name)->name, "Bool"))
             t = jl_bool_type;
     }
@@ -567,8 +565,8 @@ jl_bits_type_t *jl_new_bitstype(jl_value_t *name, jl_tag_type_t *super,
     t->super = super;
     unbind_tvars(parameters);
     t->parameters = parameters;
-    if (jl_int32_type != NULL)
-        t->bnbits = jl_box_int32(nbits);
+    if (jl_int_type != NULL)
+        t->bnbits = jl_box_int(nbits);
     else
         t->bnbits = (jl_value_t*)jl_null;
     t->nbits = nbits;
@@ -651,13 +649,14 @@ jl_value_t *pfx##_##typ(c_type x)               \
     *(c_type*)jl_bits_data(v) = x;              \
     return v;                                   \
 }
+BOX_FUNC(char,    uint32_t, jl_new_box, 2)
+BOX_FUNC(int,     long,     jl_new_box, 2)
 BOX_FUNC(int8,    int8_t,   jl_new_box, 2)
 BOX_FUNC(uint8,   uint8_t,  jl_new_box, 2)
 BOX_FUNC(int16,   int16_t,  jl_new_box, 2)
 BOX_FUNC(uint16,  uint16_t, jl_new_box, 2)
 BOX_FUNC(int32,   int32_t,  jl_new_box, 2)
 BOX_FUNC(uint32,  uint32_t, jl_new_box, 2)
-BOX_FUNC(char,    uint32_t, jl_new_box, 2)
 BOX_FUNC(float32, float,    jl_box, 2)
 #ifdef __LP64__
 BOX_FUNC(int64,   int64_t,  jl_new_box, 2)
@@ -693,11 +692,12 @@ jl_value_t *jl_box_##typ(c_type x)              \
     *(c_type*)jl_bits_data(v) = x;              \
     return v;                                   \
 }
+UIBOX_FUNC(char,   uint32_t, 2)
+SIBOX_FUNC(int,    long, 2)
 SIBOX_FUNC(int16,  int16_t, 2)
 SIBOX_FUNC(int32,  int32_t, 2)
 UIBOX_FUNC(uint16, uint16_t, 2)
 UIBOX_FUNC(uint32, uint32_t, 2)
-UIBOX_FUNC(char,   uint32_t, 2)
 #ifdef __LP64__
 SIBOX_FUNC(int64,  int64_t, 2)
 UIBOX_FUNC(uint64, uint64_t, 2)
@@ -717,12 +717,11 @@ jl_value_t *jl_box_uint8(uint32_t x)
     return boxed_uint8_cache[(uint8_t)x];
 }
 
-void jl_init_int32_int64_cache(void)
+void jl_init_int_cache(void)
 {
     int64_t i;
     for(i=0; i < NBOX_C; i++) {
-        boxed_int32_cache[i]  = jl_new_box_int32(i-NBOX_C/2);
-        boxed_int64_cache[i]  = jl_new_box_int64(i-NBOX_C/2);
+        boxed_int_cache[i] = jl_new_box_int(i-NBOX_C/2);
     }
 }
 
@@ -734,11 +733,13 @@ void jl_init_box_caches(void)
         boxed_uint8_cache[i] = jl_new_box_uint8(i);
     }
     for(i=0; i < NBOX_C; i++) {
-        boxed_int16_cache[i]  = jl_new_box_int16(i-NBOX_C/2);
+        boxed_char_cache[i]   = jl_new_box_char(i);
         boxed_uint16_cache[i] = jl_new_box_uint16(i);
         boxed_uint32_cache[i] = jl_new_box_uint32(i);
-        boxed_char_cache[i]   = jl_new_box_char(i);
         boxed_uint64_cache[i] = jl_new_box_uint64(i);
+        boxed_int16_cache[i]  = jl_new_box_int16(i-NBOX_C/2);
+        boxed_int32_cache[i]  = jl_new_box_int32(i-NBOX_C/2);
+        boxed_int64_cache[i]  = jl_new_box_int64(i-NBOX_C/2);
     }
 }
 
@@ -751,12 +752,13 @@ void jl_mark_box_caches(void)
         jl_gc_markval(boxed_uint8_cache[i]);
     }
     for(i=0; i < NBOX_C; i++) {
+        jl_gc_markval(boxed_char_cache[i]);
+        jl_gc_markval(boxed_int_cache[i]);
         jl_gc_markval(boxed_int16_cache[i]);
         jl_gc_markval(boxed_int32_cache[i]);
         jl_gc_markval(boxed_int64_cache[i]);
         jl_gc_markval(boxed_uint16_cache[i]);
         jl_gc_markval(boxed_uint32_cache[i]);
-        jl_gc_markval(boxed_char_cache[i]);
         jl_gc_markval(boxed_uint64_cache[i]);
     }
 }
@@ -764,9 +766,7 @@ void jl_mark_box_caches(void)
 
 jl_value_t *jl_box_bool(int8_t x)
 {
-    if (x)
-        return jl_true;
-    return jl_false;
+    return x ? jl_true : jl_false;
 }
 
 #define BOXN_FUNC(nb,nw)                                        \
@@ -795,15 +795,17 @@ c_type jl_unbox_##j_type(jl_value_t *v)                                 \
     assert(jl_bitstype_nbits(v->type)/8 == sizeof(c_type));             \
     return *(c_type*)jl_bits_data(v);                                   \
 }
-UNBOX_FUNC(int8,   int8_t)
-UNBOX_FUNC(uint8,  uint8_t)
-UNBOX_FUNC(int16,  int16_t)
-UNBOX_FUNC(uint16, uint16_t)
-UNBOX_FUNC(int32,  int32_t)
-UNBOX_FUNC(uint32, uint32_t)
-UNBOX_FUNC(int64,  int64_t)
-UNBOX_FUNC(uint64, uint64_t)
-UNBOX_FUNC(bool,   int8_t)
+UNBOX_FUNC(bool,    int8_t)
+UNBOX_FUNC(char,    uint32_t)
+UNBOX_FUNC(int,     long)
+UNBOX_FUNC(int8,    int8_t)
+UNBOX_FUNC(uint8,   uint8_t)
+UNBOX_FUNC(int16,   int16_t)
+UNBOX_FUNC(uint16,  uint16_t)
+UNBOX_FUNC(int32,   int32_t)
+UNBOX_FUNC(uint32,  uint32_t)
+UNBOX_FUNC(int64,   int64_t)
+UNBOX_FUNC(uint64,  uint64_t)
 UNBOX_FUNC(float32, float)
 UNBOX_FUNC(float64, double)
 

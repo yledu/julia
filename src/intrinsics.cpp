@@ -1,8 +1,10 @@
 namespace JL_I {
     enum intrinsic {
         // wrap and unwrap
-        boxui8=0, boxsi8, boxui16, boxsi16, boxui32, boxsi32, boxui64, boxsi64,
+        boxint=0,
+        boxui8, boxsi8, boxui16, boxsi16, boxui32, boxsi32, boxui64, boxsi64,
         boxf32, boxf64, box,
+        unboxint,
         unbox8, unbox16, unbox32, unbox64, unbox,
         // arithmetic
         neg_int, add_int, sub_int, mul_int,
@@ -277,6 +279,13 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
     Value *den;
     ConstantInt *ci=NULL;
     switch (f) {
+    HANDLE(boxint,1)
+#ifdef __LP64__
+        if (t != T_int64) x = builder.CreateBitCast(x, T_int64);
+#elif
+        if (t != T_int32) x = builder.CreateBitCast(x, T_int32);
+#endif
+        return mark_julia_type(x, jl_int_type);
     HANDLE(boxui8,1)
         if (t != T_int8) x = builder.CreateBitCast(x, T_int8);
         return mark_julia_type(x, jl_uint8_type);
@@ -308,6 +317,12 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
         if (t != T_float64) x = builder.CreateBitCast(x, T_float64);
         return mark_julia_type(x, jl_float64_type);
 
+    HANDLE(unboxint,1)
+#ifdef __LP64__
+        return emit_unbox(T_int64, T_pint64, x);
+#elif
+        return emit_unbox(T_int32, T_pint32, x);
+#endif
     HANDLE(unbox8,1)
         return emit_unbox(T_int8, T_pint8, x);
     HANDLE(unbox16,1)
@@ -724,9 +739,11 @@ static void add_intrinsic(const std::string &name, intrinsic f)
 
 extern "C" void jl_init_intrinsic_functions()
 {
+    ADD_I(boxint);
     ADD_I(boxui8); ADD_I(boxsi8); ADD_I(boxui16); ADD_I(boxsi16);
     ADD_I(boxui32); ADD_I(boxsi32); ADD_I(boxui64); ADD_I(boxsi64);
     ADD_I(boxf32); ADD_I(boxf64); ADD_I(box); ADD_I(unbox);
+    ADD_I(unboxint);
     ADD_I(unbox8); ADD_I(unbox16); ADD_I(unbox32); ADD_I(unbox64);
     ADD_I(neg_int); ADD_I(add_int); ADD_I(sub_int); ADD_I(mul_int);
     ADD_I(sdiv_int); ADD_I(udiv_int); ADD_I(srem_int); ADD_I(urem_int);
@@ -762,12 +779,17 @@ extern "C" void jl_init_intrinsic_functions()
     ADD_I(copysign_float32); ADD_I(copysign_float64);
     ADD_I(ccall);
     
+#ifdef __LP64__
+    BOX_F(int,int64);
+#elif
+    BOX_F(int,int32);
+#endif
+    BOX_F(char,char);
     BOX_F(int8,int32);  BOX_F(uint8,uint32);
     BOX_F(int16,int16); BOX_F(uint16,uint16);
     BOX_F(int32,int32); BOX_F(uint32,uint32);
     BOX_F(int64,int64); BOX_F(uint64,uint64);
     BOX_F(float32,float32); BOX_F(float64,float64);
-    BOX_F(char,char);
 
     box8_func  = boxfunc_llvm(ft2arg(jl_pvalue_llvmt, jl_pvalue_llvmt, T_int8),
                               "jl_box8", (void*)*jl_box8);
