@@ -179,7 +179,7 @@ static jl_value_t *eval(jl_value_t *e, jl_value_t **locals, size_t nl)
 static int label_idx(jl_value_t *tgt, jl_array_t *stmts)
 {
     size_t j;
-    long ltgt = jl_unbox_long(tgt);
+    long ltgt = jl_unbox_int(tgt);
     for(j=0; j < stmts->length; j++) {
         jl_value_t *l = jl_cellref(stmts,j);
         if (jl_is_labelnode(l) && jl_labelnode_label(l)==ltgt)
@@ -224,7 +224,7 @@ static jl_value_t *eval_body(jl_array_t *stmts, jl_value_t **locals, size_t nl,
                 }
             }
             else if (head == leave_sym) {
-                int hand_n_leave = jl_unbox_long(jl_exprarg(stmt,0));
+                int hand_n_leave = jl_unbox_int(jl_exprarg(stmt,0));
                 jl_pop_handler(hand_n_leave);
             }
             else {

@@ -42,6 +42,7 @@ jl_tag_type_t *jl_abstractarray_type;
 
 jl_bits_type_t *jl_bool_type;
 jl_bits_type_t *jl_char_type;
+jl_bits_type_t *jl_int_type;
 jl_bits_type_t *jl_int8_type;
 jl_bits_type_t *jl_uint8_type;
 jl_bits_type_t *jl_int16_type;
@@ -493,8 +494,8 @@ static jl_value_t *intersect_typevar(jl_tvar_t *a, jl_value_t *b,
         while (p != jl_null) {
             if (jl_t0(p) == (jl_value_t*)a) {
                 jl_value_t *v = jl_t1(p);
-                if (jl_is_long(b)) {
-                    if (jl_is_long(v)) {
+                if (jl_is_int(b)) {
+                    if (jl_is_int(v)) {
                         /*
                           do a meet over the lattice of tuple lengths:
                                            >=0
@@ -508,8 +509,8 @@ static jl_value_t *intersect_typevar(jl_tvar_t *a, jl_value_t *b,
                                             |  2
                                            ...
                         */
-                        long bv = jl_unbox_long(b);
-                        long vv = jl_unbox_long(v);
+                        long bv = jl_unbox_int(b);
+                        long vv = jl_unbox_int(v);
                         if (bv < 0) {
                             if (vv < 0) {
                                 if (bv < vv) {
@@ -599,9 +600,9 @@ static jl_value_t *jl_type_intersect(jl_value_t *a, jl_value_t *b,
             while (pe != jl_null) {
                 if (jl_t0(pe) == lenvar) {
                     jl_value_t *v = jl_t1(pe);
-                    if (jl_is_long(v) && jl_unbox_long(v)>=0) {
+                    if (jl_is_int(v) && jl_unbox_int(v)>=0) {
                         // N is already known in NTuple{N,...}
-                        alen = jl_unbox_long(v);
+                        alen = jl_unbox_int(v);
                         break;
                     }
                 }
@@ -620,7 +621,7 @@ static jl_value_t *jl_type_intersect(jl_value_t *a, jl_value_t *b,
                     alen = ~(alen-1);
                 }
                 if (jl_is_typevar(lenvar)) {
-                    temp = jl_box_long(alen);
+                    temp = jl_box_int(alen);
                     if (intersect_typevar((jl_tvar_t*)lenvar,temp,penv,eqc,
                                           invariant) ==
                         (jl_value_t*)jl_bottom_type) {
@@ -660,7 +661,7 @@ static jl_value_t *jl_type_intersect(jl_value_t *a, jl_value_t *b,
     }
     if (jl_is_func_type(b))
         return (jl_value_t*)jl_bottom_type;
-    if (jl_is_long(a) || jl_is_long(b))
+    if (jl_is_int(a) || jl_is_int(b))
         return (jl_value_t*)jl_bottom_type;
     // tag
     assert(jl_is_some_tag_type(a));
@@ -899,7 +900,7 @@ static jl_value_t *meet_tvar(jl_tvar_t *tv, jl_value_t *ty)
     //if (jl_types_equal((jl_value_t*)tv->lb, ty))
     //    return ty;
     if (jl_subtype((jl_value_t*)tv->lb, ty, 0)) {
-        if (jl_is_leaf_type(ty) || jl_is_long(ty))
+        if (jl_is_leaf_type(ty) || jl_is_int(ty))
             return ty;
         return (jl_value_t*)jl_new_typevar(underscore_sym, tv->lb, ty);
     }
@@ -1021,7 +1022,7 @@ static int solve_tvar_constraints(jl_tuple_t *env, jl_tuple_t **soln)
                     *soln = extend(T, S, *soln);
             }
             else {
-                if (jl_is_leaf_type(S) || jl_is_long(S) ||
+                if (jl_is_leaf_type(S) || jl_is_int(S) ||
                     S == (jl_value_t*)jl_bottom_type) {
                     v = S;
                 }
@@ -1082,7 +1083,7 @@ jl_value_t *jl_type_intersection_matching(jl_value_t *a, jl_value_t *b,
         jl_tuple_t *pe = eqc;
         while (pe != jl_null) {
             jl_value_t *val = jl_t1(pe);
-            if (jl_is_long(val) && jl_unbox_long(val)>=0) {
+            if (jl_is_int(val) && jl_unbox_int(val)>=0) {
                 break;
             }
             pe = (jl_tuple_t*)jl_t2(pe);
@@ -1115,7 +1116,7 @@ jl_value_t *jl_type_intersection_matching(jl_value_t *a, jl_value_t *b,
         pe = eqc;
         while (pe != jl_null) {
             jl_value_t *val = jl_t1(pe);
-            if (jl_is_long(val) && jl_unbox_long(val)<0) {
+            if (jl_is_int(val) && jl_unbox_int(val)<0) {
                 jl_t1(pe) = jl_t0(pe);
             }
             pe = (jl_tuple_t*)jl_t2(pe);
@@ -1172,9 +1173,9 @@ static int type_eqv_(jl_value_t *a, jl_value_t *b, jl_value_pair_t *stack)
     if (jl_is_typector(a)) a = (jl_value_t*)((jl_typector_t*)a)->body;
     if (jl_is_typector(b)) b = (jl_value_t*)((jl_typector_t*)b)->body;
     if (jl_is_typevar(a)) return 0;
-    if (jl_is_long(a)) {
-        if (jl_is_long(b))
-            return (jl_unbox_long(a) == jl_unbox_long(b));
+    if (jl_is_int(a)) {
+        if (jl_is_int(b))
+            return (jl_unbox_int(a) == jl_unbox_int(b));
         return 0;
     }
     if (jl_is_tuple(a)) {
@@ -1281,14 +1282,14 @@ jl_value_t *jl_apply_type_(jl_value_t *tc, jl_value_t **params, size_t n)
     }
     for(i=0; i < n; i++) {
         jl_value_t *pi = params[i];
-        if (!jl_is_type(pi) && !jl_is_long(pi) && !jl_is_typevar(pi)) {
+        if (!jl_is_type(pi) && !jl_is_int(pi) && !jl_is_typevar(pi)) {
             jl_type_error_rt("apply_type", tname,
                              (jl_value_t*)jl_type_type, pi);
         }
     }
     if (tc == (jl_value_t*)jl_ntuple_type && (n==1||n==2) &&
-        jl_is_long(params[0])) {
-        size_t nt = jl_unbox_long(params[0]);
+        jl_is_int(params[0])) {
+        size_t nt = jl_unbox_int(params[0]);
         return (jl_value_t*)jl_tuple_fill(nt, (n==2) ? params[1] :
                                           (jl_value_t*)jl_any_type);
     }
@@ -1791,12 +1792,12 @@ static int jl_subtype_le(jl_value_t *a, jl_value_t *b, int ta, int morespecific,
     }
     if (jl_is_tuple(a)) return 0;
 
-    if (jl_is_long(a)) {
-        if (jl_is_long(b))
-            return (jl_unbox_long(a)==jl_unbox_long(b));
+    if (jl_is_int(a)) {
+        if (jl_is_int(b))
+            return (jl_unbox_int(a)==jl_unbox_int(b));
         return 0;
     }
-    if (jl_is_long(b)) return 0;
+    if (jl_is_int(b)) return 0;
 
     if (jl_is_func_type(a)) {
         if (jl_is_func_type(b)) {
@@ -1973,15 +1974,15 @@ static jl_value_t *type_match_(jl_value_t *child, jl_value_t *parent,
         }
         return jl_false;
     }
-    if (jl_is_long(child)) {
-        if (jl_is_long(parent)) {
-            if (jl_unbox_long((jl_value_t*)child) ==
-                jl_unbox_long((jl_value_t*)parent))
+    if (jl_is_int(child)) {
+        if (jl_is_int(parent)) {
+            if (jl_unbox_int((jl_value_t*)child) ==
+                jl_unbox_int((jl_value_t*)parent))
                 return (jl_value_t*)*env;
         }
         return jl_false;
     }
-    if (jl_is_long(parent))
+    if (jl_is_int(parent))
         return jl_false;
     if (!invariant && parent == (jl_value_t*)jl_any_type)
         return (jl_value_t*)*env;
@@ -2064,7 +2065,7 @@ static jl_value_t *type_match_(jl_value_t *child, jl_value_t *parent,
             if (alen>0 && jl_is_seq_type(jl_tupleref(child,alen-1)))
                 return jl_false;
             jl_value_t *nt_len = jl_tupleref(tp,0);
-            jl_value_t *childlen = jl_box_long(((jl_tuple_t*)child)->length);
+            jl_value_t *childlen = jl_box_int(((jl_tuple_t*)child)->length);
             if (jl_is_typevar(nt_len)) {
                 tmp = type_match_(childlen, nt_len, env, morespecific,
                                   invariant);
@@ -2220,7 +2221,7 @@ static jl_tuple_t *jl_typevars(size_t n, ...)
 JL_CALLABLE(jl_f_new_expr);
 JL_CALLABLE(jl_f_new_box);
 
-extern void jl_init_int32_int64_cache(void);
+extern void jl_init_int_cache(void);
 
 void jl_init_types(void)
 {
@@ -2402,18 +2403,12 @@ void jl_init_types(void)
     jl_ntuple_typename = jl_ntuple_type->name;
 
     // non-primitive definitions follow
-    jl_int32_type = NULL;
-    jl_int32_type = jl_new_bitstype((jl_value_t*)jl_symbol("Int32"),
-                                    jl_any_type, jl_null, 32);
-    jl_int64_type = NULL;
-    jl_int64_type = jl_new_bitstype((jl_value_t*)jl_symbol("Int64"),
-                                    jl_any_type, jl_null, 64);
-    jl_init_int32_int64_cache();
-    jl_int32_type->bnbits = jl_box_int32(32);
-    jl_int64_type->bnbits = jl_box_int32(64);
-    jl_tupleset(jl_bits_kind->types, 3, (jl_value_t*)jl_int32_type);
+    jl_int_type = jl_new_bitstype((jl_value_t*)jl_symbol("Int"),
+                                  jl_any_type, jl_null, WORD_SIZE);
+    jl_init_int_cache();
+    jl_int_type->bnbits = jl_box_int(WORD_SIZE);
+    jl_tupleset(jl_bits_kind->types, 3, (jl_value_t*)jl_int_type);
 
-    jl_bool_type = NULL;
     jl_bool_type = jl_new_bitstype((jl_value_t*)jl_symbol("Bool"),
                                    jl_any_type, jl_null, 8);
     jl_false = jl_box8(jl_bool_type, 0);
@@ -2438,7 +2433,7 @@ void jl_init_types(void)
     jl_array_any_type =
         (jl_type_t*)jl_apply_type((jl_value_t*)jl_array_type,
                                   jl_tuple(2, jl_any_type,
-                                           jl_box_long(1)));
+                                           jl_box_int(1)));
 
     jl_expr_type =
         jl_new_struct_type(jl_symbol("Expr"),
@@ -2453,19 +2448,19 @@ void jl_init_types(void)
         jl_new_struct_type(jl_symbol("LineNumberNode"),
                            jl_any_type, jl_null,
                            jl_tuple(1, jl_symbol("line")),
-                           jl_tuple(1, jl_long_type));
+                           jl_tuple(1, jl_int_type));
 
     jl_labelnode_type =
         jl_new_struct_type(jl_symbol("LabelNode"),
                            jl_any_type, jl_null,
                            jl_tuple(1, jl_symbol("label")),
-                           jl_tuple(1, jl_long_type));
+                           jl_tuple(1, jl_int_type));
 
     jl_gotonode_type =
         jl_new_struct_type(jl_symbol("GotoNode"),
                            jl_any_type, jl_null,
                            jl_tuple(1, jl_symbol("label")),
-                           jl_tuple(1, jl_long_type));
+                           jl_tuple(1, jl_int_type));
 
     jl_quotenode_type =
         jl_new_struct_type(jl_symbol("QuoteNode"),
@@ -2497,7 +2492,7 @@ void jl_init_types(void)
                                     jl_any_type, jl_tuple_type,
                                     jl_function_type, jl_array_any_type,
                                     jl_bool_type, jl_sym_type,
-                                    jl_long_type));
+                                    jl_int_type));
     jl_lambda_info_type->fptr = jl_f_no_function;
 
     jl_box_type =
@@ -2527,13 +2522,7 @@ void jl_init_types(void)
 
     tv = jl_typevars(1, "T");
     jl_pointer_type =
-        jl_new_bitstype((jl_value_t*)jl_symbol("Ptr"), jl_any_type, tv,
-#ifdef __LP64__
-                        64
-#else
-                        32
-#endif
-                        );
+        jl_new_bitstype((jl_value_t*)jl_symbol("Ptr"), jl_any_type, tv, WORD_SIZE);
 
     // Type{T}
     jl_typetype_tvar = tvar("T");

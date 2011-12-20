@@ -109,10 +109,10 @@ const nothing = Nothing()
 bitstype 8 Bool
 
 abstract Number
-abstract Real  <: Number
-abstract Integer   <: Real
-abstract Unsigned  <: Integer
-abstract Float <: Real
+abstract Real     <: Number
+abstract Integer  <: Real
+abstract Unsigned <: Integer
+abstract Float    <: Real
 
 bitstype 32 Char <: Unsigned
 
@@ -128,10 +128,16 @@ bitstype 64 Uint64 <: Unsigned
 bitstype 32 Float32 <: Float
 bitstype 64 Float64 <: Float
 
-if is(Int,Int64)
-    typealias Uint Uint64
+if is64bit()
+    bitstype 64 Int <: Integer
+    typealias Long Int64
+    typealias Ulong Uint64
+    typealias Uint Ulong
 else
-    typealias Uint Uint32
+    bitstype 32 Int <: Integer
+    typealias Long Int32
+    typealias Ulong Uint32
+    typealias Uint Ulong
 end
 
 int(x) = convert(Int, x)
@@ -239,9 +245,7 @@ type BackTrace <: Exception
     trace::Array{Any,1}
 end
 
-finalizer(o, f::Function) =
-    ccall(:jl_gc_add_finalizer, Void, (Any,Any), o, f)
-
+finalizer(o, f::Function) = ccall(:jl_gc_add_finalizer, Void, (Any,Any), o, f)
 gc() = ccall(:jl_gc_collect, Void, ())
 
 current_task() = ccall(:jl_get_current_task, Any, ())::Task

@@ -108,6 +108,7 @@ static Function *jlenter_func;
 static Function *jlleave_func;
 static Function *jlallocobj_func;
 static Function *setjmp_func;
+static Function *box_int_func;
 static Function *box_int8_func;
 static Function *box_uint8_func;
 static Function *box_int16_func;
@@ -476,7 +477,7 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
     }
     else if (f->fptr == &jl_f_is && nargs==2) {
         jl_value_t *rt1 = expr_type(args[1]);
-        jl_value_t *rt2  = expr_type(args[2]);
+        jl_value_t *rt2 = expr_type(args[2]);
         if (jl_is_type_type(rt1) && jl_is_type_type(rt2) &&
             !jl_is_typevar(jl_tparam0(rt1)) &&
             !jl_is_typevar(jl_tparam0(rt2)) &&
@@ -556,10 +557,10 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
     else if (f->fptr == &jl_f_tupleref && nargs==2) {
         jl_value_t *tty = expr_type(args[1]); rt1 = tty;
         jl_value_t *ity = expr_type(args[2]); rt2 = ity;
-        if (jl_is_tuple(tty) && ity==(jl_value_t*)jl_long_type) {
+        if (jl_is_tuple(tty) && ity==(jl_value_t*)jl_int_type) {
             Value *arg1 = emit_expr(args[1], ctx, true);
-            if (jl_is_long(args[2])) {
-                uint32_t idx = (uint32_t)jl_unbox_long(args[2]);
+            if (jl_is_int(args[2])) {
+                uint32_t idx = (uint32_t)jl_unbox_int(args[2]);
                 if (idx > 0 &&
                     (idx < ((jl_tuple_t*)tty)->length ||
                      (idx == ((jl_tuple_t*)tty)->length &&
@@ -648,13 +649,13 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
     else if (f->fptr == &jl_f_arraysize && nargs==2) {
         jl_value_t *aty = expr_type(args[1]); rt1 = aty;
         jl_value_t *ity = expr_type(args[2]); rt2 = ity;
-        if (jl_is_array_type(aty) && ity == (jl_value_t*)jl_long_type) {
+        if (jl_is_array_type(aty) && ity == (jl_value_t*)jl_int_type) {
             jl_value_t *ndp = jl_tparam1(aty);
-            if (jl_is_long(ndp)) {
+            if (jl_is_int(ndp)) {
                 Value *ary = emit_expr(args[1], ctx, true);
-                size_t ndims = jl_unbox_long(ndp);
-                if (jl_is_long(args[2])) {
-                    uint32_t idx = (uint32_t)jl_unbox_long(args[2]);
+                size_t ndims = jl_unbox_int(ndp);
+                if (jl_is_int(args[2])) {
+                    uint32_t idx = (uint32_t)jl_unbox_int(args[2]);
                     if (idx > 0 && idx <= ndims) {
                         JL_GC_POP();
                         return emit_arraysize(ary, idx);
@@ -675,7 +676,7 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
     else if (f->fptr == &jl_f_arrayref && nargs==2) {
         jl_value_t *aty = expr_type(args[1]); rt1 = aty;
         jl_value_t *ity = expr_type(args[2]); rt2 = ity;
-        if (jl_is_array_type(aty) && ity == (jl_value_t*)jl_long_type) {
+        if (jl_is_array_type(aty) && ity == (jl_value_t*)jl_int_type) {
             jl_value_t *ety = jl_tparam0(aty);
             if (!jl_is_typevar(ety)) {
                 if (!jl_is_bits_type(ety)) {
@@ -712,7 +713,7 @@ static Value *emit_known_call(jl_value_t *ff, jl_value_t **args, size_t nargs,
         jl_value_t *ity = expr_type(args[2]); rt2 = ity;
         jl_value_t *vty = expr_type(args[3]); rt3 = vty;
         if (jl_is_array_type(aty) &&
-            ity == (jl_value_t*)jl_long_type) {
+            ity == (jl_value_t*)jl_int_type) {
             jl_value_t *ety = jl_tparam0(aty);
             if (!jl_is_typevar(ety) && jl_subtype(vty, ety, 0)) {
                 if (!jl_is_bits_type(ety)) {
@@ -1090,17 +1091,14 @@ static Value *emit_expr(jl_value_t *expr, jl_codectx_t *ctx, bool value)
     }
     if (!jl_is_expr(expr)) {
         // numeric literals
-        if (jl_is_int32(expr)) {
-        }
-        else if (jl_is_int64(expr)) {
-        }
-        else if (jl_is_uint64(expr)) {
-        }
-        else if (jl_is_float64(expr)) {
-        }
-        else if (jl_is_array(expr)) {
-            // string literal
-        }
+        if (jl_is_int(expr)) { }
+        else if (jl_is_int64(expr)) { }
+        else if (jl_is_uint8(expr)) { }
+        else if (jl_is_uint16(expr)) { }
+        else if (jl_is_uint32(expr)) { }
+        else if (jl_is_uint64(expr)) { }
+        else if (jl_is_float64(expr)) { }
+        else if (jl_is_array(expr)) { /* string literal */ }
         else if (jl_is_lambda_info(expr)) {
             return emit_lambda_closure(expr, ctx);
         }
@@ -1116,7 +1114,7 @@ static Value *emit_expr(jl_value_t *expr, jl_codectx_t *ctx, bool value)
     if (ex->head == goto_ifnot_sym) {
         assert(!value);
         jl_value_t *cond = args[0];
-        int labelname = jl_unbox_long(args[1]);
+        int labelname = jl_unbox_int(args[1]);
         Value *condV = emit_expr(cond, ctx, true);
 #ifdef CONDITION_REQUIRES_BOOL
         if (expr_type(cond) != (jl_value_t*)jl_bool_type &&
@@ -1264,13 +1262,13 @@ static Value *emit_expr(jl_value_t *expr, jl_codectx_t *ctx, bool value)
         return builder.CreateLoad(jlexc_var, true);
     }
     else if (ex->head == leave_sym) {
-        assert(jl_is_long(args[0]));
+        assert(jl_is_int(args[0]));
         builder.CreateCall(jlleave_func,
-                           ConstantInt::get(T_int32, jl_unbox_long(args[0])));
+                           ConstantInt::get(T_int32, jl_unbox_int(args[0])));
     }
     else if (ex->head == enter_sym) {
-        assert(jl_is_long(args[0]));
-        int labl = jl_unbox_long(args[0]);
+        assert(jl_is_int(args[0]));
+        int labl = jl_unbox_int(args[0]);
         Value *jbuf = builder.CreateGEP((*ctx->jmpbufs)[labl],
                                         ConstantInt::get(T_int32,0));
         builder.CreateCall2(jlenter_func,
@@ -1392,7 +1390,7 @@ static void emit_function(jl_lambda_info_t *lam, Function *f)
         lno = jl_linenode_line(stmt);
     }
     else if (jl_is_expr(stmt) && ((jl_expr_t*)stmt)->head == line_sym) {
-        lno = jl_unbox_long(jl_exprarg(stmt, 0));
+        lno = jl_unbox_int(jl_exprarg(stmt, 0));
         if (((jl_expr_t*)stmt)->args->length > 1) {
             assert(jl_is_symbol(jl_exprarg(stmt, 1)));
             filename = ((jl_sym_t*)jl_exprarg(stmt, 1))->name;
@@ -1557,7 +1555,7 @@ static void emit_function(jl_lambda_info_t *lam, Function *f)
     for(i=0; i < stmts->length; i++) {
         jl_value_t *stmt = jl_cellref(stmts,i);
         if (jl_is_expr(stmt) && ((jl_expr_t*)stmt)->head == enter_sym) {
-            int labl = jl_unbox_long(jl_exprarg(stmt,0));
+            int labl = jl_unbox_int(jl_exprarg(stmt,0));
             Value *svst =
                 builder.CreateAlloca(T_int8,
                                      ConstantInt::get(T_int32,
@@ -1676,7 +1674,7 @@ static void emit_function(jl_lambda_info_t *lam, Function *f)
                                                           NULL));
         }
         else if (jl_is_expr(stmt) && ((jl_expr_t*)stmt)->head == line_sym) {
-            int lno = jl_unbox_long(jl_exprarg(stmt, 0));
+            int lno = jl_unbox_int(jl_exprarg(stmt, 0));
             builder.SetCurrentDebugLocation(DebugLoc::get(lno, 1, (MDNode*)SP,
                                                           NULL));
         }

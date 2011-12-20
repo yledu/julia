@@ -460,7 +460,7 @@ static void push_frame_info_from_ip(jl_array_t *a, size_t ip)
         jl_array_grow_end(a, 3);
         jl_arrayset(a, i, (jl_value_t*)jl_symbol(func_name)); i++;
         jl_arrayset(a, i, (jl_value_t*)jl_symbol(file_name)); i++;
-        jl_arrayset(a, i, jl_box_long(line_num));
+        jl_arrayset(a, i, jl_box_int(line_num));
     }
 }
 
@@ -615,8 +615,8 @@ JL_CALLABLE(jl_f_task)
     */
     size_t ssize = JL_DEFAULT_STACK;
     if (nargs == 2) {
-        JL_TYPECHK(Task, long, args[1]);
-        ssize = jl_unbox_long(args[1]);
+        JL_TYPECHK(Task, int, args[1]);
+        ssize = jl_unbox_int(args[1]);
         if (ssize < JL_MIN_STACK)
             jl_error("Task: stack size too small");
     }

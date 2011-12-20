@@ -113,12 +113,14 @@ static void jl_serialize_tag_type(ios_t *s, jl_value_t *v)
     else if (jl_is_bits_type(v)) {
         writetag(s, jl_struct_kind);
         jl_serialize_value(s, jl_bits_kind);
-        if (v == (jl_value_t*)jl_int32_type)
+        if (v == (jl_value_t*)jl_int_type)
+#ifdef __LP64__
+            write_uint8(s, 4);
+#elif
             write_uint8(s, 2);
+#endif
         else if (v == (jl_value_t*)jl_bool_type)
             write_uint8(s, 3);
-        else if (v == (jl_value_t*)jl_int64_type)
-            write_uint8(s, 4);
         else
             write_uint8(s, 0);
         jl_serialize_value(s, ((jl_tag_type_t*)v)->name);
@@ -251,7 +253,7 @@ static void jl_serialize_value_(ios_t *s, jl_value_t *v)
         jl_serialize_value(s, ar->type);
         jl_value_t *elty = jl_tparam0(ar->type);
         for (i=0; i < ar->ndims; i++)
-            jl_serialize_value(s, jl_box_long(jl_array_dim(ar,i)));
+            jl_serialize_value(s, jl_box_int(jl_array_dim(ar,i)));
         if (jl_is_bits_type(elty)) {
             size_t tot = ar->length * ar->elsize;
             ios_write(s, ar->data, tot);
@@ -438,12 +440,14 @@ static jl_value_t *jl_deserialize_tag_type(ios_t *s, jl_struct_type_t *kind, int
     else if (kind == jl_bits_kind) {
         int form = read_uint8(s);
         jl_bits_type_t *bt;
+#ifdef __LP64__
+        if (form == 4)
+#elif
         if (form == 2)
-            bt = jl_int32_type;
+#endif
+            bt = jl_int_type;
         else if (form == 3)
             bt = jl_bool_type;
-        else if (form == 4)
-            bt = jl_int64_type;
         else
             bt = (jl_bits_type_t*)newobj((jl_type_t*)jl_bits_kind,
                                          BITS_TYPE_NW);
@@ -587,10 +591,10 @@ static jl_value_t *jl_deserialize_value(ios_t *s)
     else if (vtag == (jl_value_t*)jl_array_type) {
         jl_value_t *aty = jl_deserialize_value(s);
         jl_value_t *elty = jl_tparam0(aty);
-        int16_t ndims = jl_unbox_long(jl_tparam1(aty));
+        int16_t ndims = jl_unbox_int(jl_tparam1(aty));
         size_t *dims = alloca(ndims*sizeof(size_t));
         for(i=0; i < ndims; i++)
-            dims[i] = jl_unbox_long(jl_deserialize_value(s));
+            dims[i] = jl_unbox_int(jl_deserialize_value(s));
         jl_array_t *a = jl_new_array_((jl_type_t*)aty, ndims, dims);
         if (usetable)
             ptrhash_put(&backref_table, (void*)(ptrint_t)pos, (jl_value_t*)a);
@@ -698,10 +702,8 @@ static jl_value_t *jl_deserialize_value(ios_t *s)
         char *data = alloca(nby);
         ios_read(s, data, nby);
         jl_value_t *v=NULL;
-        if (bt == jl_int32_type)
-            v = jl_box_int32(*(int32_t*)data);
-        else if (bt == jl_int64_type)
-            v = jl_box_int64(*(int64_t*)data);
+        if (bt == jl_int_type)
+            v = jl_box_int(*(long*)data);
         else if (bt == jl_bool_type)
             v = jl_box_bool(*(int8_t*)data);
         else {
@@ -859,7 +861,7 @@ void jl_restore_system_image(char *fname)
     jl_array_uint8_type =
         (jl_type_t*)jl_apply_type((jl_value_t*)jl_array_type,
                                   jl_tuple2(jl_uint8_type,
-                                            jl_box_long(1)));
+                                            jl_box_int(1)));
     jl_boot_file_loaded = 1;
     jl_typeinf_func =
         (jl_function_t*)*(jl_get_bindingp(jl_system_module,
@@ -987,10 +989,33 @@ void jl_init_serializer(void)
                      jl_symbol("convert"), jl_symbol("typeassert"),
                      jl_false, jl_true,
 
-                     jl_box_int32(0), jl_box_int32(1), jl_box_int32(2),
-                     jl_box_int32(3), jl_box_int32(4), jl_box_int32(5),
-                     jl_box_int32(6), jl_box_int32(7), jl_box_int32(8),
-                     jl_box_int32(9), jl_box_int32(10), jl_box_int32(11),
+                     jl_box_int(0),  jl_box_int(1),  jl_box_int(2),
+                     jl_box_int(3),  jl_box_int(4),  jl_box_int(5),
+                     jl_box_int(6),  jl_box_int(7),  jl_box_int(8),
+                     jl_box_int(9),  jl_box_int(10), jl_box_int(11),
+                     jl_box_int(12), jl_box_int(13), jl_box_int(14),
+                     jl_box_int(15), jl_box_int(16), jl_box_int(17),
+                     jl_box_int(18), jl_box_int(19), jl_box_int(20),
+                     jl_box_int(21), jl_box_int(22), jl_box_int(23),
+                     jl_box_int(24), jl_box_int(25), jl_box_int(26),
+                     jl_box_int(27), jl_box_int(28), jl_box_int(29),
+                     jl_box_int(30), jl_box_int(31), jl_box_int(32),
+                     jl_box_int(33), jl_box_int(34), jl_box_int(35),
+                     jl_box_int(36), jl_box_int(37), jl_box_int(38),
+                     jl_box_int(39), jl_box_int(40), jl_box_int(41),
+                     jl_box_int(42), jl_box_int(43), jl_box_int(44),
+                     jl_box_int(45), jl_box_int(46), jl_box_int(47),
+                     jl_box_int(48), jl_box_int(49), jl_box_int(50),
+                     jl_box_int(51), jl_box_int(52), jl_box_int(53),
+                     jl_box_int(54), jl_box_int(55), jl_box_int(56),
+                     jl_box_int(57), jl_box_int(58), jl_box_int(59),
+                     jl_box_int(60), jl_box_int(61), jl_box_int(62),
+                     jl_box_int(63), jl_box_int(64),
+
+                     jl_box_int32(0),  jl_box_int32(1),  jl_box_int32(2),
+                     jl_box_int32(3),  jl_box_int32(4),  jl_box_int32(5),
+                     jl_box_int32(6),  jl_box_int32(7),  jl_box_int32(8),
+                     jl_box_int32(9),  jl_box_int32(10), jl_box_int32(11),
                      jl_box_int32(12), jl_box_int32(13), jl_box_int32(14),
                      jl_box_int32(15), jl_box_int32(16), jl_box_int32(17),
                      jl_box_int32(18), jl_box_int32(19), jl_box_int32(20),
@@ -998,23 +1023,11 @@ void jl_init_serializer(void)
                      jl_box_int32(24), jl_box_int32(25), jl_box_int32(26),
                      jl_box_int32(27), jl_box_int32(28), jl_box_int32(29),
                      jl_box_int32(30), jl_box_int32(31), jl_box_int32(32),
-#ifndef __LP64__
-                     jl_box_int32(33), jl_box_int32(34), jl_box_int32(35),
-                     jl_box_int32(36), jl_box_int32(37), jl_box_int32(38),
-                     jl_box_int32(39), jl_box_int32(40), jl_box_int32(41),
-                     jl_box_int32(42), jl_box_int32(43), jl_box_int32(44),
-                     jl_box_int32(45), jl_box_int32(46), jl_box_int32(47),
-                     jl_box_int32(48), jl_box_int32(49), jl_box_int32(50),
-                     jl_box_int32(51), jl_box_int32(52), jl_box_int32(53),
-                     jl_box_int32(54), jl_box_int32(55), jl_box_int32(56),
-                     jl_box_int32(57), jl_box_int32(58), jl_box_int32(59),
-                     jl_box_int32(60), jl_box_int32(61), jl_box_int32(62),
-                     jl_box_int32(63), jl_box_int32(64),
-#endif
-                     jl_box_int64(0), jl_box_int64(1), jl_box_int64(2),
-                     jl_box_int64(3), jl_box_int64(4), jl_box_int64(5),
-                     jl_box_int64(6), jl_box_int64(7), jl_box_int64(8),
-                     jl_box_int64(9), jl_box_int64(10), jl_box_int64(11),
+
+                     jl_box_int64(0),  jl_box_int64(1),  jl_box_int64(2),
+                     jl_box_int64(3),  jl_box_int64(4),  jl_box_int64(5),
+                     jl_box_int64(6),  jl_box_int64(7),  jl_box_int64(8),
+                     jl_box_int64(9),  jl_box_int64(10), jl_box_int64(11),
                      jl_box_int64(12), jl_box_int64(13), jl_box_int64(14),
                      jl_box_int64(15), jl_box_int64(16), jl_box_int64(17),
                      jl_box_int64(18), jl_box_int64(19), jl_box_int64(20),
@@ -1022,19 +1035,7 @@ void jl_init_serializer(void)
                      jl_box_int64(24), jl_box_int64(25), jl_box_int64(26),
                      jl_box_int64(27), jl_box_int64(28), jl_box_int64(29),
                      jl_box_int64(30), jl_box_int64(31), jl_box_int64(32),
-#ifdef __LP64__
-                     jl_box_int64(33), jl_box_int64(34), jl_box_int64(35),
-                     jl_box_int64(36), jl_box_int64(37), jl_box_int64(38),
-                     jl_box_int64(39), jl_box_int64(40), jl_box_int64(41),
-                     jl_box_int64(42), jl_box_int64(43), jl_box_int64(44),
-                     jl_box_int64(45), jl_box_int64(46), jl_box_int64(47),
-                     jl_box_int64(48), jl_box_int64(49), jl_box_int64(50),
-                     jl_box_int64(51), jl_box_int64(52), jl_box_int64(53),
-                     jl_box_int64(54), jl_box_int64(55), jl_box_int64(56),
-                     jl_box_int64(57), jl_box_int64(58), jl_box_int64(59),
-                     jl_box_int64(60), jl_box_int64(61), jl_box_int64(62),
-                     jl_box_int64(63), jl_box_int64(64),
-#endif
+
                      jl_labelnode_type, jl_linenumbernode_type,
                      jl_gotonode_type, jl_quotenode_type, jl_topnode_type,
                      jl_type_type, jl_bottom_type, jl_pointer_type,
@@ -1071,7 +1072,7 @@ void jl_init_serializer(void)
 
     void *fptrs[] = { jl_f_new_expr, jl_f_new_box,
                       jl_weakref_ctor, jl_new_array_internal, 
-                      jl_f_throw, jl_f_is, 
+                      jl_f_throw, jl_f_is64bit, jl_f_is, 
                       jl_f_no_function, jl_f_typeof, 
                       jl_f_subtype, jl_f_isa, 
                       jl_f_typeassert, jl_f_apply, 
@@ -1083,7 +1084,7 @@ void jl_init_serializer(void)
                       jl_f_arrayset, jl_f_arraysize, 
                       jl_f_instantiate_type, jl_f_convert, 
                       jl_f_convert_tuple, jl_f_print_array_uint8, 
-                      jl_f_show_int64, jl_f_show_uint64, 
+                      jl_f_show_int, jl_f_show_int64, jl_f_show_uint64, 
                       jl_f_show_any, jl_f_print_symbol, 
                       jl_trampoline, jl_f_new_struct_type, 
                       jl_f_new_struct_fields, jl_f_new_type_constructor, 

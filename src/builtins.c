@@ -114,6 +114,16 @@ void jl_pop_handler(int n)
 
 // --- primitives ---
 
+JL_CALLABLE(jl_f_is64bit)
+{
+    JL_NARGSV(is64bit, 0);
+#ifdef __LP64__
+    return jl_true;
+#elif
+    return jl_false;
+#endif
+}
+
 JL_CALLABLE(jl_f_is)
 {
     JL_NARGS(is, 2, 2);
@@ -355,7 +365,7 @@ void jl_load_file_expr(char *fname, jl_value_t *ast)
         jl_value_t *fn=NULL, *ln=NULL;
         JL_GC_PUSH(&fn, &ln);
         fn = jl_pchar_to_string(fname, strlen(fname));
-        ln = jl_box_long(lineno);
+        ln = jl_box_int(lineno);
         jl_raise(jl_new_struct(jl_loaderror_type, fn, ln,
                                jl_exception_in_transit));
     }
@@ -474,9 +484,9 @@ JL_CALLABLE(jl_f_tupleref)
 {
     JL_NARGS(tupleref, 2, 2);
     JL_TYPECHK(tupleref, tuple, args[0]);
-    JL_TYPECHK(tupleref, long, args[1]);
+    JL_TYPECHK(tupleref, int, args[1]);
     jl_tuple_t *t = (jl_tuple_t*)args[0];
-    size_t i = jl_unbox_long(args[1])-1;
+    size_t i = jl_unbox_int(args[1])-1;
     if (i >= t->length)
         jl_error("tupleref: index out of range");
     return jl_tupleref(t, i);
@@ -486,7 +496,7 @@ JL_CALLABLE(jl_f_tuplelen)
 {
     JL_NARGS(tuplelen, 1, 1);
     JL_TYPECHK(tuplelen, tuple, args[0]);
-    return jl_box_long(((jl_tuple_t*)args[0])->length);
+    return jl_box_int(((jl_tuple_t*)args[0])->length);
 }
 
 // structs --------------------------------------------------------------------
@@ -788,8 +798,17 @@ void jl_show_float(double d, int ndec)
     }
 }
 
+JL_CALLABLE(jl_f_show_int)
+{
+    JL_NARGS(show, 1, 1);
+    ios_t *s = jl_current_output_stream();
+    ios_printf(s, "%ld", *(long*)jl_bits_data(args[0]));
+    return (jl_value_t*)jl_nothing;
+}
+
 JL_CALLABLE(jl_f_show_int64)
 {
+    JL_NARGS(show, 1, 1);
     ios_t *s = jl_current_output_stream();
     ios_printf(s, "%lld", *(int64_t*)jl_bits_data(args[0]));
     return (jl_value_t*)jl_nothing;
@@ -797,6 +816,7 @@ JL_CALLABLE(jl_f_show_int64)
 
 JL_CALLABLE(jl_f_show_uint64)
 {
+    JL_NARGS(show, 1, 1);
     ios_t *s = jl_current_output_stream();
     ios_printf(s, "%llu", *(uint64_t*)jl_bits_data(args[0]));
     return (jl_value_t*)jl_nothing;
@@ -804,7 +824,7 @@ JL_CALLABLE(jl_f_show_uint64)
 
 JL_CALLABLE(jl_f_show_any)
 {
-    JL_NARGS(print, 1, 1);
+    JL_NARGS(show, 1, 1);
     // fallback for printing some other builtin types
     ios_t *s = jl_current_output_stream();
     jl_value_t *v = args[0];
@@ -1023,13 +1043,13 @@ JL_CALLABLE(jl_f_new_bits_type)
     JL_NARGS(new_bits_type, 3, 3);
     JL_TYPECHK(new_bits_type, symbol, args[0]);
     JL_TYPECHK(new_bits_type, tuple, args[1]);
-    JL_TYPECHK(new_bits_type, long, args[2]);
+    JL_TYPECHK(new_bits_type, int, args[2]);
     jl_tuple_t *p = (jl_tuple_t*)args[1];
     if (!all_typevars(p)) {
         jl_errorf("invalid type parameter list for %s",
                   ((jl_sym_t*)args[0])->name);
     }
-    int32_t nb = jl_unbox_long(args[2]);
+    int32_t nb = jl_unbox_int(args[2]);
     if (nb < 1 || nb>=(1<<23) || (nb&7) != 0)
         jl_errorf("invalid number of bits in type %s",
                   ((jl_sym_t*)args[0])->name);
@@ -1255,7 +1275,8 @@ void jl_init_primitives(void)
     add_builtin_func("invoke", jl_f_invoke);
     add_builtin_func("eval", jl_f_top_eval);
     add_builtin_func("isbound", jl_f_isbound);
-    
+    add_builtin_func("is64bit", jl_f_is64bit);
+
     // functions for internal use
     add_builtin_func("tupleref",  jl_f_tupleref);
     add_builtin_func("tuplelen",  jl_f_tuplelen);
@@ -1314,29 +1335,23 @@ void jl_init_primitives(void)
     add_builtin("AbstractKind", (jl_value_t*)jl_tag_kind);
     add_builtin("UnionKind", (jl_value_t*)jl_union_kind);
 
-#ifdef __LP64__
-    add_builtin("Int", (jl_value_t*)jl_int64_type);
-#else
-    add_builtin("Int", (jl_value_t*)jl_int32_type);
-#endif
-
     add_builtin("ANY", jl_ANY_flag);
 }
 
 void jl_init_builtins(void)
 {
     jl_function_t *jl_print_gf = jl_new_generic_function(jl_symbol("print"));
-
     add_builtin_method1(jl_print_gf,
                         (jl_type_t*)jl_array_uint8_type,
                         jl_f_print_array_uint8);
-    add_builtin_method1(jl_print_gf, (jl_type_t*)jl_sym_type,
+    add_builtin_method1(jl_print_gf,
+                        (jl_type_t*)jl_sym_type,
                         jl_f_print_symbol);
 
     jl_show_gf = jl_new_generic_function(jl_symbol("show"));
-
-    add_builtin_method1(jl_show_gf, (jl_type_t*)jl_any_type,         jl_f_show_any);
-    add_builtin_method1(jl_show_gf, (jl_type_t*)jl_int64_type,       jl_f_show_int64);
+    add_builtin_method1(jl_show_gf, (jl_type_t*)jl_any_type, jl_f_show_any);
+    add_builtin_method1(jl_show_gf, (jl_type_t*)jl_int_type, jl_f_show_int);
+    add_builtin_method1(jl_show_gf, (jl_type_t*)jl_int64_type, jl_f_show_int64);
 
     jl_convert_gf = jl_new_generic_function(jl_symbol("convert"));
     jl_add_method(jl_convert_gf,
@@ -1346,7 +1361,7 @@ void jl_init_builtins(void)
                   jl_tuple2(jl_tuple_type, jl_tuple_type),
                   jl_new_closure(jl_f_convert_tuple, NULL));
 
-    add_builtin("print",    (jl_value_t*)jl_print_gf);
-    add_builtin("show",     (jl_value_t*)jl_show_gf);
-    add_builtin("convert",  (jl_value_t*)jl_convert_gf);
+    add_builtin("print",   (jl_value_t*)jl_print_gf);
+    add_builtin("show",    (jl_value_t*)jl_show_gf);
+    add_builtin("convert", (jl_value_t*)jl_convert_gf);
 }

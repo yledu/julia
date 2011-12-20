@@ -133,7 +133,7 @@ jl_array_t *jl_reshape_array(jl_type_t *atype, jl_array_t *data,
     else {
         size_t *adims = &a->nrows;
         for(i=0; i < ndims; i++) {
-            adims[i] = jl_unbox_long(jl_tupleref(dims, i));
+            adims[i] = jl_unbox_int(jl_tupleref(dims, i));
         }
     }
     
@@ -151,7 +151,7 @@ jl_array_t *jl_new_array(jl_type_t *atype, jl_tuple_t *dims)
     size_t *adims = alloca(ndims*sizeof(size_t));
     size_t i;
     for(i=0; i < ndims; i++)
-        adims[i] = jl_unbox_long(jl_tupleref(dims,i));
+        adims[i] = jl_unbox_int(jl_tupleref(dims,i));
     return _new_array(atype, ndims, adims);
 }
 
@@ -170,7 +170,7 @@ JL_CALLABLE(jl_new_array_internal)
 {
     jl_struct_type_t *atype = (jl_struct_type_t*)env;
     jl_value_t *ndims = jl_tupleref(atype->parameters,1);
-    size_t nd = jl_unbox_long(ndims);
+    size_t nd = jl_unbox_int(ndims);
     jl_value_t **dargs;
     if (nargs == 1 && jl_is_tuple(args[0])) {
         jl_tuple_t *d = (jl_tuple_t*)args[0];
@@ -187,8 +187,8 @@ JL_CALLABLE(jl_new_array_internal)
     size_t *adims = alloca(nd*sizeof(size_t));
     for(i=0; i < nd; i++) {
         jl_value_t *di = dargs[i];
-        JL_TYPECHK(Array, long, di);
-        adims[i] = jl_unbox_long(di);
+        JL_TYPECHK(Array, int, di);
+        adims[i] = jl_unbox_int(di);
     }
     return (jl_value_t*)_new_array((jl_type_t*)atype, nd, adims);
 }
@@ -245,7 +245,7 @@ JL_CALLABLE(jl_f_arraylen)
 {
     JL_NARGS(arraylen, 1, 1);
     JL_TYPECHK(arraylen, array, args[0]);
-    return jl_box_long(((jl_array_t*)args[0])->length);
+    return jl_box_int(((jl_array_t*)args[0])->length);
 }
 
 JL_CALLABLE(jl_f_arraysize)
@@ -254,11 +254,11 @@ JL_CALLABLE(jl_f_arraysize)
     jl_array_t *a = (jl_array_t*)args[0];
     size_t nd = jl_array_ndims(a);
     if (nargs == 2) {
-        JL_TYPECHK(arraysize, long, args[1]);
-        int dno = jl_unbox_long(args[1]);
+        JL_TYPECHK(arraysize, int, args[1]);
+        int dno = jl_unbox_int(args[1]);
         if (dno < 1 || dno > nd)
             jl_error("arraysize: dimension out of range");
-        return jl_box_long((&a->nrows)[dno-1]);
+        return jl_box_int((&a->nrows)[dno-1]);
     }
     else {
         JL_NARGS(arraysize, 1, 1);
@@ -267,7 +267,7 @@ JL_CALLABLE(jl_f_arraysize)
     JL_GC_PUSH(&d);
     size_t i;
     for(i=0; i < nd; i++)
-        jl_tupleset(d, i, jl_box_long(jl_array_dim(a,i)));
+        jl_tupleset(d, i, jl_box_int(jl_array_dim(a,i)));
     JL_GC_POP();
     return (jl_value_t*)d;
 }
@@ -327,9 +327,9 @@ JL_CALLABLE(jl_f_arrayref)
 {
     JL_NARGS(arrayref, 2, 2);
     JL_TYPECHK(arrayref, array, args[0]);
-    JL_TYPECHK(arrayref, long, args[1]);
+    JL_TYPECHK(arrayref, int, args[1]);
     jl_array_t *a = (jl_array_t*)args[0];
-    size_t i = jl_unbox_long(args[1])-1;
+    size_t i = jl_unbox_int(args[1])-1;
     if (i >= a->length) {
         jl_errorf("ref array[%d]: index out of range", i+1);
     }
@@ -369,9 +369,9 @@ JL_CALLABLE(jl_f_arrayset)
 {
     JL_NARGS(arrayset, 3, 3);
     JL_TYPECHK(arrayset, array, args[0]);
-    JL_TYPECHK(arrayset, long, args[1]);
+    JL_TYPECHK(arrayset, int, args[1]);
     jl_array_t *b = (jl_array_t*)args[0];
-    size_t i = jl_unbox_long(args[1])-1;
+    size_t i = jl_unbox_int(args[1])-1;
     if (i >= b->length) {
         jl_errorf("assign array[%d]: index out of range", i+1);
     }
