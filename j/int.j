@@ -116,12 +116,9 @@ else
     convert(::Type{Int}, x::Int32) = boxint(unbox32(x))
 end
 
-# to avoid method ambiguities:
 convert(::Type{Int}, x::Int) = x
-convert(::Type{Bool}, x::Int) = (x!=0)
-
-convert(::Type{Int}, x) = convert(Int, convert(Long, x))
-convert{T}(::Type{T}, x::Int) = convert(T, convert(Long, x))
+convert(::Type{Int}, x::Integer) = convert(Int, convert(Long, x))
+convert{T<:Integer}(::Type{T}, x::Int) = convert(T, convert(Long, x))
 
 int   (x) = convert(Int,    x)
 int8  (x) = convert(Int8,   x)
