@@ -116,7 +116,7 @@ static void jl_serialize_tag_type(ios_t *s, jl_value_t *v)
         if (v == (jl_value_t*)jl_int_type)
 #ifdef __LP64__
             write_uint8(s, 4);
-#elif
+#else
             write_uint8(s, 2);
 #endif
         else if (v == (jl_value_t*)jl_bool_type)
@@ -442,7 +442,7 @@ static jl_value_t *jl_deserialize_tag_type(ios_t *s, jl_struct_type_t *kind, int
         jl_bits_type_t *bt;
 #ifdef __LP64__
         if (form == 4)
-#elif
+#else
         if (form == 2)
 #endif
             bt = jl_int_type;
@@ -457,7 +457,7 @@ static jl_value_t *jl_deserialize_tag_type(ios_t *s, jl_struct_type_t *kind, int
 
         size_t nbits = read_int32(s);
         bt->nbits = nbits;
-        bt->bnbits = jl_box_int32(nbits);
+        bt->bnbits = jl_box_int(nbits);
         bt->fptr = NULL;
         bt->env = NULL;
         bt->linfo = NULL;
@@ -1011,30 +1011,6 @@ void jl_init_serializer(void)
                      jl_box_int(57), jl_box_int(58), jl_box_int(59),
                      jl_box_int(60), jl_box_int(61), jl_box_int(62),
                      jl_box_int(63), jl_box_int(64),
-
-                     jl_box_int32(0),  jl_box_int32(1),  jl_box_int32(2),
-                     jl_box_int32(3),  jl_box_int32(4),  jl_box_int32(5),
-                     jl_box_int32(6),  jl_box_int32(7),  jl_box_int32(8),
-                     jl_box_int32(9),  jl_box_int32(10), jl_box_int32(11),
-                     jl_box_int32(12), jl_box_int32(13), jl_box_int32(14),
-                     jl_box_int32(15), jl_box_int32(16), jl_box_int32(17),
-                     jl_box_int32(18), jl_box_int32(19), jl_box_int32(20),
-                     jl_box_int32(21), jl_box_int32(22), jl_box_int32(23),
-                     jl_box_int32(24), jl_box_int32(25), jl_box_int32(26),
-                     jl_box_int32(27), jl_box_int32(28), jl_box_int32(29),
-                     jl_box_int32(30), jl_box_int32(31), jl_box_int32(32),
-
-                     jl_box_int64(0),  jl_box_int64(1),  jl_box_int64(2),
-                     jl_box_int64(3),  jl_box_int64(4),  jl_box_int64(5),
-                     jl_box_int64(6),  jl_box_int64(7),  jl_box_int64(8),
-                     jl_box_int64(9),  jl_box_int64(10), jl_box_int64(11),
-                     jl_box_int64(12), jl_box_int64(13), jl_box_int64(14),
-                     jl_box_int64(15), jl_box_int64(16), jl_box_int64(17),
-                     jl_box_int64(18), jl_box_int64(19), jl_box_int64(20),
-                     jl_box_int64(21), jl_box_int64(22), jl_box_int64(23),
-                     jl_box_int64(24), jl_box_int64(25), jl_box_int64(26),
-                     jl_box_int64(27), jl_box_int64(28), jl_box_int64(29),
-                     jl_box_int64(30), jl_box_int64(31), jl_box_int64(32),
 
                      jl_labelnode_type, jl_linenumbernode_type,
                      jl_gotonode_type, jl_quotenode_type, jl_topnode_type,

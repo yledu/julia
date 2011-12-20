@@ -282,7 +282,7 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
     HANDLE(boxint,1)
 #ifdef __LP64__
         if (t != T_int64) x = builder.CreateBitCast(x, T_int64);
-#elif
+#else
         if (t != T_int32) x = builder.CreateBitCast(x, T_int32);
 #endif
         return mark_julia_type(x, jl_int_type);
@@ -320,7 +320,7 @@ static Value *emit_intrinsic(intrinsic f, jl_value_t **args, size_t nargs,
     HANDLE(unboxint,1)
 #ifdef __LP64__
         return emit_unbox(T_int64, T_pint64, x);
-#elif
+#else
         return emit_unbox(T_int32, T_pint32, x);
 #endif
     HANDLE(unbox8,1)
@@ -781,7 +781,7 @@ extern "C" void jl_init_intrinsic_functions()
     
 #ifdef __LP64__
     BOX_F(int,int64);
-#elif
+#else
     BOX_F(int,int32);
 #endif
     BOX_F(char,char);

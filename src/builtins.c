@@ -119,7 +119,7 @@ JL_CALLABLE(jl_f_is64bit)
     JL_NARGSV(is64bit, 0);
 #ifdef __LP64__
     return jl_true;
-#elif
+#else
     return jl_false;
 #endif
 }
