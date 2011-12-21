@@ -37,7 +37,7 @@ convert(::Type{Float}, x::Uint64) = convert(Float64, x) # LOSSY
 
 convert(::Type{Float32}, x::Int) = convert(Float32, convert(Long,x))
 convert(::Type{Float64}, x::Int) = convert(Float64, convert(Long,x))
-convert(::Type{Float64}, x::Int) = convert(Float, convert(Long,x))
+convert(::Type{Float}  , x::Int) = convert(Float64, x)
 
 float32(x) = convert(Float32, x)
 float64(x) = convert(Float64, x)

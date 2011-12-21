@@ -67,9 +67,6 @@ load("set.j")
 
 # compiler
 load("inference.j")
-1:2:3;
-1:2;
-length([1,2,3]);
 ccall(:jl_enable_inference, Void, ())
 
 # I/O, strings & printing

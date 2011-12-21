@@ -117,6 +117,7 @@ else
 end
 
 convert(::Type{Int}, x::Int) = x
+convert(::Type{Int}, x::Bool) = convert(Int, convert(Long, x))
 convert(::Type{Int}, x::Integer) = convert(Int, convert(Long, x))
 convert{T<:Integer}(::Type{T}, x::Int) = convert(T, convert(Long, x))
 

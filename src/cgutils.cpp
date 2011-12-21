@@ -1,5 +1,7 @@
 // utility procedures used in code generation
 
+static Value *mark_julia_type(Value *v, jl_value_t *jt);
+
 // --- string constants ---
 
 static std::map<const std::string, GlobalVariable*> stringConstants;
@@ -233,9 +235,11 @@ static Value *emit_tuplelen(Value *t)
 {
     Value *lenbits = emit_nthptr(t, 1);
 #ifdef __LP64__
-    return builder.CreatePtrToInt(lenbits, T_int64);
+    return mark_julia_type(builder.CreatePtrToInt(lenbits, T_int64),
+                           (jl_value_t*)jl_int_type);
 #else
-    return builder.CreatePtrToInt(lenbits, T_int32);
+    return mark_julia_type(builder.CreatePtrToInt(lenbits, T_int32),
+                           (jl_value_t*)jl_int_type);
 #endif
 }
 
@@ -251,9 +255,11 @@ static Value *emit_arraysize(Value *t, Value *dim)
         emit_nthptr(t, builder.CreateAdd(dim,
                                          ConstantInt::get(dim->getType(), o)));
 #ifdef __LP64__
-    return builder.CreatePtrToInt(dbits, T_int64);
+    return mark_julia_type(builder.CreatePtrToInt(dbits, T_int64),
+                           (jl_value_t*)jl_int_type);
 #else
-    return builder.CreatePtrToInt(dbits, T_int32);
+    return mark_julia_type(builder.CreatePtrToInt(dbits, T_int32),
+                           (jl_value_t*)jl_int_type);
 #endif
 }
 
@@ -266,9 +272,11 @@ static Value *emit_arraylen(Value *t)
 {
     Value *lenbits = emit_nthptr(t, 2);
 #ifdef __LP64__
-    return builder.CreatePtrToInt(lenbits, T_int64);
+    return mark_julia_type(builder.CreatePtrToInt(lenbits, T_int64),
+                           (jl_value_t*)jl_int_type);
 #else
-    return builder.CreatePtrToInt(lenbits, T_int32);
+    return mark_julia_type(builder.CreatePtrToInt(lenbits, T_int32),
+                           (jl_value_t*)jl_int_type);
 #endif
 }
 
@@ -346,7 +354,6 @@ static bool is_julia_type_representable(jl_value_t *jt)
 {
     return
         (jt == (jl_value_t*)jl_bool_type ||
-         jt == (jl_value_t*)jl_int_type ||
          jt == (jl_value_t*)jl_int8_type ||
          jt == (jl_value_t*)jl_int16_type ||
          jt == (jl_value_t*)jl_int32_type ||
