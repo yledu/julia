@@ -792,6 +792,7 @@ function parse_int{T<:Integer}(::Type{T}, s::String, base::Integer)
             'A' <= c <= 'Z' ? c-'A'+int32(10) :
             'a' <= c <= 'z' ? c-'a'+int32(10) :
             error(c, " is not an alphanumeric digit")
+        d = convert(T,d)
         if base <= d
             error(c, " is not a valid digit in base ", base)
         end

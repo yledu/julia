@@ -12,10 +12,10 @@ type SubArray{T,N,A<:AbstractArray,I<:(RangeIndex...,)} <: AbstractArray{T,N}
         function SubArray(p::A, i::(Int,))
             new(p, i, (length(i[1]),), [1], i[1])
         end
-        function SubArray(p::A, i::(Range1{Int},))
+        function SubArray{T<:Integer}(p::A, i::(Range1{T},))
             new(p, i, (length(i[1]),), [1], i[1].start)
         end
-        function SubArray(p::A, i::(Range{Int},))
+        function SubArray{T<:Integer}(p::A, i::(Range{T},))
             new(p, i, (length(i[1]),), [i[1].step], i[1].start)
         end
     else
