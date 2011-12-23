@@ -147,25 +147,25 @@ b = rand()
 @assert sign(1//0) == 1
 @assert sign(-1//0) == -1
 
-@assert signbit(1) == 1
-@assert signbit(-1) == -1
-@assert signbit(0) == 1
-@assert signbit(1.0) == 1
-@assert signbit(-1.0) == -1
-@assert signbit(0.0) == 1
-@assert signbit(-0.0) == -1
-@assert signbit(1.0/0.0) == 1
-@assert signbit(-1.0/0.0) == -1
-@assert signbit(Inf) == 1
-@assert signbit(-Inf) == -1
-@assert signbit(NaN) == 1
-@assert signbit(-NaN) == -1
-@assert signbit(2//3) == 1
-@assert signbit(-2//3) == -1
-@assert signbit(0//1) == 1
-@assert signbit(-0//1) == 1
-@assert signbit(1//0) == 1
-@assert signbit(-1//0) == -1
+@assert signbit(1) == 0
+@assert signbit(0) == 0
+@assert signbit(-1) == 1
+@assert signbit(1.0) == 0
+@assert signbit(0.0) == 0
+@assert signbit(-0.0) == 1
+@assert signbit(-1.0) == 1
+@assert signbit(1.0/0.0) == 0
+@assert signbit(-1.0/0.0) == 1
+@assert signbit(Inf) == 0
+@assert signbit(-Inf) == 1
+@assert signbit(NaN) == 0
+@assert signbit(-NaN) == 1
+@assert signbit(2//3) == 0
+@assert signbit(-2//3) == 1
+@assert signbit(0//1) == 0
+@assert signbit(-0//1) == 0
+@assert signbit(1//0) == 0
+@assert signbit(-1//0) == 1
 
 @assert isnan(1)     == false
 @assert isnan(1.0)   == false
@@ -258,9 +258,12 @@ end
 
 # check type of constructed rationals
 int_types = {Int8, Uint8, Int16, Uint16, Int32, Uint32, Int64, Uint64}
-for N = int_types, D = int_types
-    T = promote_type(N,D)
-    @assert typeof(convert(N,2)//convert(D,3)) <: Rational{T}
+for A = int_types, B = int_types
+    # if A==Uint64 && !(B<:Unsigned) || B==Uint64 && !(A<:Unsigned)
+    #     continue
+    # end
+    T = promote_type(A,B)
+    @assert typeof(convert(A,2)//convert(B,3)) <: Rational{T}
 end
 
 # check type of constructed complexes
@@ -268,6 +271,10 @@ real_types = {Int8, Uint8, Int16, Uint16, Int32, Uint32, Int64, Uint64, Float32,
               Rational{Int8}, Rational{Uint8}, Rational{Int16}, Rational{Uint16},
               Rational{Int32}, Rational{Uint32}, Rational{Int64}, Rational{Uint64}}
 for A = real_types, B = real_types
+    # if (A==Uint64 || A==Rational{Uint64}) && !(B<:Unsigned) ||
+    #    (B==Uint64 || B==Rational{Uint64}) && !(A<:Unsigned)
+    #     continue
+    # end
     T = promote_type(A,B)
     @assert typeof(ComplexPair(convert(A,2),convert(B,3))) <: ComplexPair{T}
 end

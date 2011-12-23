@@ -193,6 +193,11 @@ promote_rule(::Type{Uint32}, ::Type{Int16}) = Int64
 promote_rule(::Type{Uint32}, ::Type{Int32}) = Int64
 promote_rule(::Type{Uint32}, ::Type{Int64}) = Int64
 
+promote_rule(::Type{Uint64}, ::Type{Int8} ) = Uint64 # LOSSY
+promote_rule(::Type{Uint64}, ::Type{Int16}) = Uint64 # LOSSY
+promote_rule(::Type{Uint64}, ::Type{Int32}) = Uint64 # LOSSY
+promote_rule(::Type{Uint64}, ::Type{Int64}) = Uint64 # LOSSY
+
 ## integer arithmetic ##
 
 -(x::Int)   = boxint(neg_int(unboxint(x)))

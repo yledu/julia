@@ -10,9 +10,9 @@ abs(x::Int64) = (y=x>>63; (x+y)$y)
 isodd(n::Integer) = bool(rem(n,2))
 iseven(n::Integer) = !isodd(n)
 
-sign(x::Integer) = convert(Int,(x > 0))-convert(Int,(x < 0))
+sign(x::Integer) = int(x > 0)-int(x < 0)
 
-signbit(x::Unsigned ) = 1
+signbit(x::Unsigned) = 0
 signbit(x::Int  ) = int(signbit(long(x)))
 signbit(x::Int8 ) = int(boxsi8 (lshr_int(unbox8 (x), 7)))
 signbit(x::Int16) = int(boxsi16(lshr_int(unbox16(x),15)))
@@ -21,7 +21,7 @@ signbit(x::Int64) = int(boxsi64(lshr_int(unbox64(x),63)))
 
 copysign(x::Integer, y::Real) = y < 0 ? -abs(x) : abs(x)
 copysign(x::Integer, y::Integer) = copysign(promote(x,y)...)
-copysign(x::Int  , y::Int  ) = int(copysign(long(x),long(y)))
+copysign(x::Int  , y::Int) = int(copysign(long(x),long(y)))
 copysign(x::Int8 , y::Int8 ) = (t=(x$y)>>7;  (x+t)$t)
 copysign(x::Int16, y::Int16) = (t=(x$y)>>15; (x+t)$t)
 copysign(x::Int32, y::Int32) = (t=(x$y)>>31; (x+t)$t)

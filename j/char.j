@@ -1,6 +1,7 @@
 ## char conversions ##
 
 convert(::Type{Char}, x::Bool   ) = box(Char,sext32(unbox8(x)))
+convert(::Type{Char}, x::Int    ) = convert(Char, long(x))
 convert(::Type{Char}, x::Int8   ) = box(Char,sext32(unbox8(x)))
 convert(::Type{Char}, x::Uint8  ) = box(Char,zext32(unbox8(x)))
 convert(::Type{Char}, x::Int16  ) = box(Char,sext32(unbox16(x)))
@@ -27,34 +28,45 @@ unsigned(x::Char) = uint32(x)
 
 ## char promotions ##
 
-promote_rule(::Type{Char}, ::Type{Int8})   = Int32
-promote_rule(::Type{Char}, ::Type{Uint8})  = Int32
-promote_rule(::Type{Char}, ::Type{Int16})  = Int32
-promote_rule(::Type{Char}, ::Type{Uint16}) = Int32
-promote_rule(::Type{Char}, ::Type{Int32})  = Int32
+promote_rule(::Type{Char}, ::Type{Char})   = Int
+promote_rule(::Type{Char}, ::Type{Int})    = Int
+promote_rule(::Type{Char}, ::Type{Int8})   = Int
+promote_rule(::Type{Char}, ::Type{Uint8})  = Int
+promote_rule(::Type{Char}, ::Type{Int16})  = Int
+promote_rule(::Type{Char}, ::Type{Uint16}) = Int
+promote_rule(::Type{Char}, ::Type{Int32})  = Int
 promote_rule(::Type{Char}, ::Type{Uint32}) = Uint32
 promote_rule(::Type{Char}, ::Type{Int64})  = Int64
 promote_rule(::Type{Char}, ::Type{Uint64}) = Uint64
 
 ## character operations & comparisons ##
 
--(x::Char) = -int32(x)
-~(x::Char) = ~int32(x)
-+(x::Char, y::Char) = int32(x) + int32(y)
--(x::Char, y::Char) = int32(x) - int32(y)
-*(x::Char, y::Char) = int32(x) * int32(y)
-div(x::Char, y::Char) = div(int32(x), int32(y))
-fld(x::Char, y::Char) = div(int32(x), int32(y))
-rem(x::Char, y::Char) = rem(int32(x), int32(y))
-mod(x::Char, y::Char) = rem(int32(x), int32(y))
-&(x::Char, y::Char) = int32(x) & int32(y)
-|(x::Char, y::Char) = int32(x) | int32(y)
-($)(x::Char, y::Char) = int32(x) $ int32(y)
-<<(x::Char, y::Int32) = int32(x) << y
->>(x::Char, y::Int32) = int32(x) >>> y
->>>(x::Char, y::Int32) = int32(x) >>> y
-==(x::Char, y::Char) = int32(x) == int32(y)
-<(x::Char, y::Char) = uint32(x) < uint32(y)
+-(x::Char) = -int(x)
++(x::Char, y::Char) = int(x) + int(y)
+-(x::Char, y::Char) = int(x) - int(y)
+*(x::Char, y::Char) = int(x) * int(y)
+/(x::Char, y::Char) = int(x) / int(y)
+
++(x::Char, y::Int ) = char(int32(x) + int32(y))
++(x::Int,  y::Char) = y + x
+-(x::Char, y::Int ) = x + (-y)
+
+div(x::Char, y::Char) = div(int(x), int(y))
+fld(x::Char, y::Char) = div(int(x), int(y))
+rem(x::Char, y::Char) = rem(int(x), int(y))
+mod(x::Char, y::Char) = rem(int(x), int(y))
+
+~(x::Char) = ~uint32(x)
+&(x::Char, y::Char) = uint32(x) & uint32(y)
+|(x::Char, y::Char) = uint32(x) | uint32(y)
+($)(x::Char, y::Char) = uint32(x) $ uint32(y)
+
+<<(x::Char, y::Int32) = uint32(x) << y
+>>(x::Char, y::Int32) = uint32(x) >>> y
+>>>(x::Char, y::Int32) = uint32(x) >>> y
+
+==(x::Char, y::Char) = uint32(x) == uint32(y)
+< (x::Char, y::Char) = uint32(x) <  uint32(y)
 <=(x::Char, y::Char) = uint32(x) <= uint32(y)
 
 ## traits ##

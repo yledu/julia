@@ -1,4 +1,4 @@
-if true
+if false
     # simple print definitions for debugging. enable these if something
     # goes wrong during bootstrap before printing code is available.
     length(a::Array) = arraylen(a)
@@ -154,7 +154,7 @@ compile_hint(isempty, (Array{WorkItem,1},))
 compile_hint(ref, (HashTable{Any,Any}, Int32))
 compile_hint(event_loop, (Bool,))
 compile_hint(_start, ())
-compile_hint(color_available, ())
+# compile_hint(color_available, ())
 compile_hint(process_options, (Array{Any,1},))
 compile_hint(run_repl, ())
 compile_hint(anyp, (Function, Array{Any,1}))

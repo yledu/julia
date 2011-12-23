@@ -111,6 +111,7 @@ _jl_dsfmt_randui64() =
     boxui64(or_int(zext64(unbox32(_jl_dsfmt_randui32())),
                           shl_int(zext64(unbox32(_jl_dsfmt_randui32())), 32)))
 
+randi(::Type{Int})    = int(randi(Long))
 randi(::Type{Int32})  = int32(_jl_dsfmt_randui32()) & typemax(Int32)
 randi(::Type{Uint32}) = _jl_dsfmt_randui32()
 randi(::Type{Int64})  = int64(_jl_dsfmt_randui64()) & typemax(Int64)

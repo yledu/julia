@@ -18,7 +18,7 @@ function show(z::Complex)
     r, i = reim(z)
     if isnan(r) || isfinite(i)
         show(r)
-        if signbit(i) == -1 && !isnan(i)
+        if signbit(i)==1 && !isnan(i)
             i = -i
             print(" - ")
         else
