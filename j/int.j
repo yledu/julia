@@ -441,8 +441,8 @@ trailing_zeros(x::Uint64) = boxui64(cttz_int(unbox64(x)))
 
 ## traits ##
 
-typemin(::Type{Int   }) = typemin(Long)
-typemax(::Type{Int   }) = typemax(Long)
+typemin(::Type{Int   }) = int(typemin(Long))
+typemax(::Type{Int   }) = int(typemax(Long))
 typemin(::Type{Int8  }) = int8(-128)
 typemax(::Type{Int8  }) = int8(127)
 typemin(::Type{Uint8 }) = uint8(0)
