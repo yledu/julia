@@ -14,7 +14,11 @@ typealias RangeIndex Union(Int, Range{Int}, Range1{Int})
 
 size{T,n}(t::AbstractArray{T,n}, d) = (d>n ? 1 : size(t)[d])
 eltype{T,n}(::AbstractArray{T,n}) = T
+eltype{T,n}(::Type{AbstractArray{T,n}}) = T
+eltype{T<:AbstractArray}(::Type{T}) = eltype(super(T))
 ndims{T,n}(::AbstractArray{T,n}) = n
+ndims{T,n}(::Type{AbstractArray{T,n}}) = n
+ndims{T<:AbstractArray}(::Type{T}) = ndims(super(T))
 length(t::AbstractArray) = prod(size(t))
 first(a::AbstractArray) = a[1]
 last(a::AbstractArray) = a[end]
@@ -52,8 +56,6 @@ similar{T}(a::AbstractArray{T}, dims::Dims)   = similar(a, T, dims)
 similar{T}(a::AbstractArray{T}, dims::Int...) = similar(a, T, dims)
 similar   (a::AbstractArray, T, dims::Int...) = similar(a, T, dims)
 
-empty(a::AbstractArray) = similar(a, 0)
-
 function reshape(a::AbstractArray, dims::Dims)
     if prod(dims) != numel(a)
         error("reshape: invalid dimensions")
@@ -65,6 +67,8 @@ function reshape(a::AbstractArray, dims::Dims)
     return b
 end
 reshape(a::AbstractArray, dims::Int...) = reshape(a, dims)
+
+vec(a::AbstractArray) = reshape(a,max(size(a)))
 
 function squeeze(A::AbstractArray)
     d = ()
@@ -193,8 +197,8 @@ end
 function gen_cartesian_map(cache, genbodies, ranges, exargnames, exargs...)
     N = length(ranges)
     if !has(cache,N)
-        dimargnames = { gensym() | i=1:N }
-        ivars = { gensym() | i=1:N }
+        dimargnames = { gensym() for i=1:N }
+        ivars = { gensym() for i=1:N }
         bodies = genbodies(ivars)
 
         ## creating a 2d array, to pass as bodies
@@ -298,8 +302,6 @@ end
 # 1-d indexing is assumed defined on subtypes
 assign(t::AbstractArray, x, i::Integer) =
     error("assign not defined for ",typeof(t))
-assign(t::AbstractArray, x::AbstractArray, i::Integer) =
-    error("assign not defined for ",typeof(t))
 
 assign(t::AbstractArray, x, i::Real)          = (t[iround(i)] = x)
 assign(t::AbstractArray, x, i::Real, j::Real) = (t[iround(i),iround(j)] = x)
@@ -316,15 +318,15 @@ vcat() = Array(None, 0)
 hcat() = Array(None, 0)
 
 ## cat: special cases
-hcat{T}(X::T...) = [ X[j] | i=1, j=1:length(X) ]
-vcat{T}(X::T...) = [ X[i] | i=1:length(X) ]
+hcat{T}(X::T...) = [ X[j] for i=1, j=1:length(X) ]
+vcat{T}(X::T...) = [ X[i] for i=1:length(X) ]
 
 function hcat{T}(V::AbstractVector{T}...)
     height = length(V[1])
     for j = 2:length(V)
         if length(V[j]) != height; error("hcat: mismatched dimensions"); end
     end
-    [ V[j][i]::T | i=1:length(V[1]), j=1:length(V) ]
+    [ V[j][i]::T for i=1:length(V[1]), j=1:length(V) ]
 end
 
 function vcat{T}(V::AbstractVector{T}...)
@@ -414,7 +416,7 @@ function cat(catdim::Integer, X...)
             len = d <= ndimsX[1] ? dimsX[1][d] : 1
             for i = 2:nargs
                 if len != (d <= ndimsX[i] ? dimsX[i][d] : 1)
-                    error("cat: dimension mismatch on dimension", d)
+                    error("cat: dimension mismatch on dimension ", d)
                     #error("lala $d")
                 end
             end
@@ -690,6 +692,7 @@ function repmat(a::AbstractMatrix, m::Int, n::Int)
     end
     return b
 end
+repmat(a::AbstractVector, m::Int, n::Int) = repmat(reshape(a, length(a), 1), m, n)
 
 sub2ind(dims) = 1
 sub2ind(dims, i::Integer) = int(i)
@@ -715,7 +718,7 @@ function sub2ind(dims, I::Integer...)
 end
 
 sub2ind(dims, I::AbstractVector...) =
-    [ sub2ind(dims, map(X->X[i], I)...) | i=1:length(I[1]) ]
+    [ sub2ind(dims, map(X->X[i], I)...) for i=1:length(I[1]) ]
 
 ind2sub(dims::(Integer...), ind::Integer) = ind2sub(dims, int(ind))
 ind2sub(dims::(), ind::Integer) = throw(BoundsError())
@@ -826,9 +829,9 @@ function bsxfun(f, a::AbstractArray, b::AbstractArray)
     end
     c = Array(promote_type(eltype(a),eltype(b)), shp...)
 
-    aidxs = { 1:size(a,i) | i=1:nd }
-    bidxs = { 1:size(b,i) | i=1:nd }
-    cidxs = { 1:size(c,i) | i=1:nd }
+    aidxs = { 1:size(a,i) for i=1:nd }
+    bidxs = { 1:size(b,i) for i=1:nd }
+    cidxs = { 1:size(c,i) for i=1:nd }
 
     sliceop = function (idxs::Int...)
         j = 1

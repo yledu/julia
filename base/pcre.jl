@@ -24,7 +24,8 @@ const PCRE_COMPILE_MASK      =
       PCRE_NO_AUTO_CAPTURE   |
       PCRE_NO_START_OPTIMIZE |
       PCRE_NO_UTF8_CHECK     |
-      PCRE_UNGREEDY
+      PCRE_UNGREEDY          |
+      PCRE_UTF8
 
 const PCRE_EXECUTE_MASK      =
       PCRE_NEWLINE_ANY       |
@@ -93,13 +94,16 @@ pcre_study(re::Array{Uint8}) = pcre_study(re, int32(0))
 
 function pcre_exec(regex::Array{Uint8}, extra::Ptr{Void},
                    str::ByteString, offset::Integer, options::Integer, cap::Bool)
+    if offset < 0 || length(str) < offset
+        error("index out of range")
+    end
     ncap = pcre_info(regex, extra, PCRE_INFO_CAPTURECOUNT, Int32)
     ovec = Array(Int32, 3(ncap+1))
     n = ccall(dlsym(_jl_libpcre, :pcre_exec), Int32,
               (Ptr{Void}, Ptr{Void}, Ptr{Uint8}, Int32,
                Int32, Int32, Ptr{Int32}, Int32),
               regex, extra, str, length(str),
-              offset-1, options, ovec, length(ovec))
+              offset, options, ovec, length(ovec))
     if n < -1
         error("pcre_exec: error $n")
     end

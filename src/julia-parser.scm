@@ -539,10 +539,6 @@
 			       (eq? (car arg) 'tuple))
 			  (list* 'call op (cdr arg))
 			  (list  'call op arg)))))))
-	  ((eq? t '|::|)
-	   ;; allow ::T, omitting argument name
-	   (take-token s)
-	   `(|::| ,(gensym) ,(parse-call s)))
 	  (else
 	   (parse-factor s)))))
 
@@ -566,7 +562,21 @@
 (define (parse-factor s)
   (parse-factor-h s parse-decl (prec-ops 11)))
 
-(define (parse-decl s) (parse-LtoR s parse-call (prec-ops 12)))
+(define (parse-decl s)
+  (let loop ((ex (if (eq? (peek-token s) '|::|)
+		     (begin (take-token s)
+			    `(|::| ,(parse-call s)))
+		     (parse-call s))))
+    (let ((t (peek-token s)))
+      (case t
+	((|::|) (take-token s)
+	 (loop (list t ex (parse-call s))))
+	((->)   (take-token s)
+	 ;; -> is unusual: it binds tightly on the left and
+	 ;; loosely on the right.
+	 (list '-> ex (parse-eq* s)))
+	(else
+	 ex)))))
 
 ; parse function call, indexing, dot, and transpose expressions
 ; also handles looking for syntactic reserved words
@@ -613,10 +623,6 @@
 					       ,(string (take-token s))))
 			     (loop `(macrocall ,macname ,(car str)))))
 		       ex))
-		  ((->)  (take-token s)
-		   ;; -> is unusual: it binds tightly on the left and
-		   ;; loosely on the right.
-		   (list '-> ex (parse-eq* s)))
 		  (else ex))))))))
 
 ;(define (parse-dot s)  (parse-LtoR s parse-atom (prec-ops 13)))
@@ -746,15 +752,18 @@
 	   `(const ,assgn))))
     ((module)
      (let ((name (parse-atom s)))
-       (if (not (symbol? name))
-	   (error (string "invalid module name " name)))
        (begin0 (list word name (parse-block s))
 	       (expect-end s))))
     ((ccall)
      (if (not (eqv? (peek-token s) #\())
 	 (error "expected ( after ccall"))
      (take-token s)
-     (cons 'ccall (parse-arglist s #\))))
+     (let ((al (parse-arglist s #\))))
+       (if (and (length> al 1)
+		(memq (cadr al) '(cdecl stdcall fastcall)))
+	   ;; place (callingconv) at end of arglist
+	   `(ccall ,(car al) ,@(cddr al) (,(cadr al)))
+	   `(ccall ,.al))))
     (else (error "unhandled reserved word")))))
 
 ; parse comma-separated assignments, like "i=1:n,j=1:m,..."
@@ -788,7 +797,8 @@
      (let loop ((exprs '()))
        (if (or (closing-token? (peek-token s))
 	       (newline? (peek-token s))
-	       (and inside-vec (eq? (peek-token s) '|\||)))
+	       (and inside-vec (or (eq? (peek-token s) '|\||)
+				   (eq? (peek-token s) 'for))))
 	   (reverse! exprs)
 	   (let ((e (parse-eq s)))
 	     (case (peek-token s)
@@ -855,28 +865,12 @@
 	    (else
 	     (error "missing separator in array expression")))))))
 
-(define (cat-to-hvcat closer e)
-  (if (and
-       (eqv? closer #\])
-       (eq? (car e) 'vcat)
-       (any (lambda (x) (and (pair? x) (eq? (car x) 'hcat))) (cdr e)))
-      ;; convert nested hcat inside vcat to hvcat
-      (let ((rows (map (lambda (x)
-			 (if (and (pair? x) (eq? (car x) 'hcat))
-			     (cdr x)
-			     (list x)))
-		       (cdr e))))
-	`(call (top hvcat)
-	       (tuple ,@(map length rows))
-	       ,@(apply nconc rows)))
-      e))
-
 (define (parse-matrix s first closer)
   (define (fix head v) (cons head (reverse v)))
   (define (update-outer v outer)
     (cond ((null? v)       outer)
 	  ((null? (cdr v)) (cons (car v) outer))
-	  (else            (cons (fix 'hcat v) outer))))
+	  (else            (cons (fix 'row v) outer))))
   (let loop ((vec   (list first))
 	     (outer '()))
     (let ((t  (if (eqv? (peek-token s) #\newline)
@@ -884,13 +878,11 @@
 		  (require-token s))))
       (if (eqv? t closer)
 	  (begin (take-token s)
-		 (cat-to-hvcat
-		  closer
-		  (if (pair? outer)
-		      (fix 'vcat (update-outer vec outer))
-		      (if (or (null? vec) (null? (cdr vec)))
-			  (fix 'vcat vec)     ; [x]   => (vcat x)
-			  (fix 'hcat vec))))) ; [x y] => (hcat x y)
+		 (if (pair? outer)
+		     (fix 'vcat (update-outer vec outer))
+		     (if (or (null? vec) (null? (cdr vec)))
+			 (fix 'vcat vec)     ; [x]   => (vcat x)
+			 (fix 'hcat vec))))  ; [x y] => (hcat x y)
 	  (case t
 	    ((#\; #\newline)
 	     (take-token s) (loop '() (update-outer vec outer)))
@@ -898,31 +890,33 @@
 	     (error "unexpected comma in matrix expression"))
 	    ((#\] #\})
 	     (error (string "unexpected " t)))
+	    ((for)
+	     (error "invalid comprehension syntax"))
 	    (else
 	     (loop (cons (parse-eq* s) vec) outer)))))))
 
 (define (parse-cat s closer)
   (with-normal-ops
    (with-space-sensitive
-    (parse-cat- s closer))))
-(define (parse-cat- s closer)
-  (if (eqv? (require-token s) closer)
-      (begin (take-token s)
-	     (list 'vcat))  ; [] => (vcat)
-      (let ((first (without-bitor (parse-eq* s))))
-	(case (peek-token s)
-	  ;; dispatch to array syntax, comprehension, or matrix syntax
-	  ((#\,)
-	   (parse-vcat s first closer))
-	  ((|\||)
-	   (take-token s)
-	   (let ((r (parse-comma-separated-iters s)))
-	     (if (not (eqv? (require-token s) closer))
-		 (error (string "expected " closer))
-		 (take-token s))
-	     `(comprehension ,first ,@r)))
-	  (else
-	   (parse-matrix s first closer))))))
+    (if (eqv? (require-token s) closer)
+	(begin (take-token s)
+	       (list 'vcat))  ; [] => (vcat)
+	(let ((first (without-bitor (parse-eq* s))))
+	  (case (peek-token s)
+	    ;; dispatch to array syntax, comprehension, or matrix syntax
+	    ((#\,)
+	     (parse-vcat s first closer))
+	    ;;((|\||)
+	    ;; (error "old syntax"))
+	    ((|\|| for)
+	     (take-token s)
+	     (let ((r (parse-comma-separated-iters s)))
+	       (if (not (eqv? (require-token s) closer))
+		   (error (string "expected " closer))
+		   (take-token s))
+	       `(comprehension ,first ,@r)))
+	    (else
+	     (parse-matrix s first closer))))))))
 
 ; for sequenced evaluation inside expressions: e.g. (a;b, c;d)
 (define (parse-stmts-within-expr s)
@@ -1110,14 +1104,14 @@
 		       ((eq? (car vex) 'hcat)
 			`(cell2d 1 ,(length (cdr vex)) ,@(cdr vex)))
 		       (else  ; (vcat ...)
-			(if (and (pair? (cadr vex)) (eq? (caadr vex) 'hcat))
+			(if (and (pair? (cadr vex)) (eq? (caadr vex) 'row))
 			    (let ((nr (length (cdr vex)))
 				  (nc (length (cdadr vex))))
 			      ;; make sure all rows are the same length
 			      (if (not (every
 					(lambda (x)
 					  (and (pair? x)
-					       (eq? (car x) 'hcat)
+					       (eq? (car x) 'row)
 					       (length= (cdr x) nc)))
 					(cddr vex)))
 				  (error "inconsistent shape in cell expression"))
@@ -1127,7 +1121,7 @@
 						(apply map list
 						       (map cdr (cdr vex))))))
 			    (if (any (lambda (x) (and (pair? x)
-						      (eq? (car x) 'hcat)))
+						      (eq? (car x) 'row)))
 				     (cddr vex))
 				(error "inconsistent shape in cell expression")
 				`(cell1d ,@(cdr vex)))))))))
@@ -1161,12 +1155,12 @@
 	   (take-token s)
 	   (parse-backquote s))
 
-	  (else (take-token s)))))
+	  (else (error (string "invalid syntax: " (take-token s)))))))
 
 ; --- main entry point ---
 
-; can optionally specify which grammar production to parse.
-; default is parse-stmts.
+;; can optionally specify which grammar production to parse.
+;; default is parse-stmts.
 (define (julia-parse s . production)
   (cond ((string? s)
 	 (apply julia-parse (make-token-stream (open-input-string s))
@@ -1176,8 +1170,8 @@
 	((eof-object? s)
 	 s)
 	(else
-	 ; as a special case, allow early end of input if there is
-	 ; nothing left but whitespace
+	 ;; as a special case, allow early end of input if there is
+	 ;; nothing left but whitespace
 	 (skip-ws-and-comments (ts:port s))
 	 (if (eqv? (peek-token s) #\newline) (take-token s))
 	 (let ((t (peek-token s)))
@@ -1185,35 +1179,3 @@
 	       t
 	       ((if (null? production) parse-stmts (car production))
 		s))))))
-
-(define (check-end-of-input s)
-  (skip-ws-and-comments (ts:port s))
-  (if (eqv? (peek-token s) #\newline) (take-token s))
-  (if (not (eof-object? (peek-token s)))
-      (error (string "extra input after end of expression: "
-		     (peek-token s)))))
-
-(define (julia-parse-stream filename stream)
-  (set! current-filename (symbol filename))
-  (let ((s (make-token-stream stream)))
-    (with-exception-catcher
-     (lambda (e)
-       (if (and (pair? e) (eq? (car e) 'error))
-	   (let ((msg (cadr e)))
-	     (raise `(error ,(string msg " at " filename ":" 
-				     (input-port-line (ts:port s))))))
-	   (raise e)))
-     (lambda ()
-       (skip-ws-and-comments (ts:port s))
-       (let ((linen (input-port-line (ts:port s))))
-	 (let loop ((lines '())
-		    (linen linen)
-		    (curr  (julia-parse s)))
-	   (if (eof-object? curr)
-	       (reverse lines)
-	       (begin
-		 (skip-ws-and-comments (ts:port s))
-		 (let ((nl (input-port-line (ts:port s))))
-		   (loop (list* curr `(line ,linen) lines)
-			 nl
-			 (julia-parse s)))))))))))

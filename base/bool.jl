@@ -5,11 +5,13 @@ convert(::Type{Bool}, x::Number) = (x!=0)
 # promote Bool to any other numeric type
 promote_rule{T<:Number}(::Type{Bool}, ::Type{T}) = T
 
-bool(x) = true
 bool(x::Bool) = x
 bool(x::Number) = convert(Bool, x)
 
 sizeof(::Type{Bool}) = 1
+
+typemin(::Type{Bool}) = false
+typemax(::Type{Bool}) = true
 
 ## boolean operations ##
 

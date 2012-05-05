@@ -16,11 +16,12 @@ Rational{T<:Integer}(n::T, d::T) = Rational{T}(n,d)
 Rational(n::Integer, d::Integer) = Rational(promote(n,d)...)
 Rational(n::Integer) = Rational(n,one(n))
 
-//(n::Integer, d::Integer) = Rational(n,d)
-//(x::Rational, y::Integer) = x.num // (x.den*y)
-//(x::Integer, y::Rational) = (x*y.den) // y.num
-//(x::Complex, y::Real) = complex(real(x)//y, imag(x)//y)
-//(x::Real, y::Complex) = x*y'//real(y*y')
+//(n::Integer,  d::Integer ) = Rational(n,d)
+//(x::Rational, y::Integer ) = x.num//(x.den*y)
+//(x::Integer,  y::Rational) = (x*y.den)//y.num
+//(x::Rational, y::Rational) = (x.num*y.den)//(x.den*y.num)
+//(x::Complex,  y::Real    ) = complex(real(x)//y,imag(x)//y)
+//(x::Real,     y::Complex ) = x*y'//real(y*y')
 
 function //(x::Complex, y::Complex)
     xy = x*y'
@@ -28,11 +29,11 @@ function //(x::Complex, y::Complex)
     complex(real(xy)//yy, imag(xy)//yy)
 end
 
-function show(x::Rational)
+function show(io, x::Rational)
     if isinf(x)
-        print(x.num > 0 ? "Inf" : "-Inf")
+        print(io, x.num > 0 ? "Inf" : "-Inf")
     else
-        show(num(x)); print("//"); show(den(x))
+        show(io, num(x)); print(io, "//"); show(io, den(x))
     end
 end
 

@@ -51,6 +51,13 @@ function next(s::UTF8String, i::Int)
     char(c), i
 end
 
+function first_utf8_byte(c::Char)
+    c < 0x80    ? uint8(c)            :
+    c < 0x800   ? uint8((c>>6 )|0xc0) :
+    c < 0x10000 ? uint8((c>>12)|0xe0) :
+                  uint8((c>>18)|0xf0)
+end
+
 ## overload methods for efficiency ##
 
 isvalid(s::UTF8String, i::Integer) =
@@ -58,28 +65,34 @@ isvalid(s::UTF8String, i::Integer) =
 
 function ref(s::UTF8String, r::Range1{Int})
     i = isvalid(s,first(r)) ? first(r) : nextind(s,first(r))
-    j = nextind(s,last(r)) - 1
+    j = nextind(s,last(r))-1
     UTF8String(s.data[i:j])
 end
 
-strchr(s::UTF8String, c::Char) =
-    c < 0x80 ? memchr(s.data, c) : invoke(strchr, (String,Char), s, c)
+function strchr(s::UTF8String, c::Char, i::Integer)
+    if c < 0x80 return memchr(s.data, c, i) end
+    while true
+        i = memchr(s.data, first_utf8_byte(c), i)
+        if i==0 || s[i]==c return i end
+        i = next(s,i)[2]
+    end
+end
 
 strcat(a::ByteString, b::ByteString, c::ByteString...) = UTF8String(memcat(a,b,c...))
     # ^^ at least one must be UTF-8 or the ASCII-only method would get called
 
 transform_to_utf8(s::String, f::Function) =
-    print_to_string(length(s), @thunk for c=s; print(f(c)); end)
+    sprint(length(s), io->for c in s; write(io,f(c)::Char); end)
 
 uppercase(s::UTF8String) = transform_to_utf8(s, uppercase)
 lowercase(s::UTF8String) = transform_to_utf8(s, lowercase)
 
-ucfirst(s::UTF8String) = print_to_string(length(s), print, uppercase(s[1]), s[2:])
-lcfirst(s::UTF8String) = print_to_string(length(s), print, lowercase(s[1]), s[2:])
+ucfirst(s::UTF8String) = string(uppercase(s[1]), s[2:])
+lcfirst(s::UTF8String) = string(lowercase(s[1]), s[2:])
 
 ## outputing UTF-8 strings ##
 
-print(s::UTF8String) = print(s.data)
+print(io::IO, s::UTF8String) = (write(io, s.data);nothing)
 write(io, s::UTF8String) = write(io, s.data)
 
 ## transcoding to UTF-8 ##

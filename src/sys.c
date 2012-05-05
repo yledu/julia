@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/sysctl.h>
 #include <errno.h>
 #include <signal.h>
 #include <libgen.h>
@@ -14,6 +15,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "julia.h"
+
+#ifdef __SSE__
+#include <xmmintrin.h>
+#endif
 
 // --- io and select ---
 
@@ -78,6 +83,17 @@ DLLEXPORT int32_t jl_nb_available(ios_t *s)
     return (int32_t)(s->size - s->bpos);
 }
 
+DLLEXPORT int jl_ios_eof(ios_t *s)
+{
+    if (ios_eof(s))
+        return 1;
+    if (s->state == bst_rd) {
+        if (ios_readprep(s, 1) < 1)
+            return 1;
+    }
+    return 0;
+}
+
 // --- io constructors ---
 
 DLLEXPORT int jl_sizeof_ios_t(void) { return sizeof(ios_t); }
@@ -91,33 +107,6 @@ DLLEXPORT jl_value_t *jl_stdout_stream(void)
     jl_array_t *a = jl_alloc_array_1d(jl_array_uint8_type, sizeof(ios_t));
     a->data = (void*)ios_stdout;
     return (jl_value_t*)a;
-}
-
-// --- current output stream ---
-
-jl_value_t *jl_current_output_stream_obj(void)
-{
-    return jl_current_task->state.ostream_obj;
-}
-
-DLLEXPORT ios_t *jl_current_output_stream(void)
-{
-    return jl_current_task->state.current_output_stream;
-}
-
-void jl_set_current_output_stream_obj(jl_value_t *v)
-{
-    jl_current_task->state.ostream_obj = v;
-    ios_t *s = (ios_t*)jl_array_data(jl_fieldref(v,0));
-    jl_current_task->state.current_output_stream = s;
-    // if current stream has never been set before, propagate to all
-    // outer contexts.
-    jl_savestate_t *ss = jl_current_task->state.prev;
-    while (ss != NULL && ss->ostream_obj == (jl_value_t*)jl_null) {
-        ss->ostream_obj = v;
-        ss->current_output_stream = s;
-        ss = ss->prev;
-    }
 }
 
 // --- buffer manipulation ---
@@ -135,11 +124,7 @@ jl_array_t *jl_takebuf_array(ios_t *s)
     else {
         assert(s->julia_alloc);
         char *b = ios_takebuf(s, &n);
-        a = jl_alloc_array_1d(jl_array_uint8_type, 0);
-        a->data = b;
-        a->length = n-1;
-        a->nrows = n-1;
-        jl_gc_acquire_buffer(b);
+        a = jl_ptr_to_array_1d(jl_array_uint8_type, b, n-1, 1);
     }
     return a;
 }
@@ -153,22 +138,40 @@ jl_value_t *jl_takebuf_string(ios_t *s)
     return str;
 }
 
-jl_array_t *jl_readuntil(ios_t *s, uint8_t delim)
+jl_value_t *jl_readuntil(ios_t *s, uint8_t delim)
 {
-    jl_array_t *a = jl_alloc_array_1d(jl_array_uint8_type, 80);
-    ios_t dest;
-    jl_ios_mem(&dest, 0);
-    ios_setbuf(&dest, a->data, 80, 0);
-    size_t n = ios_copyuntil(&dest, s, delim);
-    if (dest.buf != a->data) {
-        return jl_takebuf_array(&dest);
+    jl_array_t *a;
+    // manually inlined common case
+    char *pd = (char*)memchr(s->buf+s->bpos, delim, s->size - s->bpos);
+    if (pd) {
+        size_t n = pd-(s->buf+s->bpos)+1;
+        a = jl_alloc_array_1d(jl_array_uint8_type, n);
+        memcpy(jl_array_data(a), s->buf+s->bpos, n);
+        s->bpos += n;
     }
     else {
-        a->length = n;
-        a->nrows = n;
-        ((char*)a->data)[n] = '\0';
+        a = jl_alloc_array_1d(jl_array_uint8_type, 80);
+        ios_t dest;
+        jl_ios_mem(&dest, 0);
+        ios_setbuf(&dest, a->data, 80, 0);
+        size_t n = ios_copyuntil(&dest, s, delim);
+        if (dest.buf != a->data) {
+            a = jl_takebuf_array(&dest);
+        }
+        else {
+            a->length = n;
+            a->nrows = n;
+            ((char*)a->data)[n] = '\0';
+        }
     }
-    return a;
+    JL_GC_PUSH(&a);
+    jl_struct_type_t* string_type = u8_isvalid(a->data, a->length) == 1 ? // ASCII
+        jl_ascii_string_type : jl_utf8_string_type;
+    jl_value_t *str = alloc_2w();
+    str->type = (jl_type_t*)string_type;
+    jl_fieldref(str,0) = (jl_value_t*)a;
+    JL_GC_POP();
+    return str;
 }
 
 // -- syscall utilities --
@@ -179,6 +182,27 @@ jl_value_t *jl_strerror(int errnum)
 {
     char *str = strerror(errnum);
     return jl_pchar_to_string((char*)str, strlen(str));
+}
+
+// -- get the number of CPU cores --
+
+DLLEXPORT int jl_cpu_cores(void) {
+#if defined(__APPLE__)
+    size_t len = 4;
+    int32_t count;
+    int nm[2] = {CTL_HW, HW_AVAILCPU};
+    sysctl(nm, 2, &count, &len, NULL, 0);
+    if (count < 1) {
+        nm[1] = HW_NCPU;
+        sysctl(nm, 2, &count, &len, NULL, 0);
+        if (count < 1) { count = 1; }
+    }
+    return count;
+#elif defined(__linux)
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#else // test for Windows?
+    return GetActiveProcessorCount(__in WORD GroupNumber);
+#endif
 }
 
 // -- iterating the environment --
@@ -357,4 +381,27 @@ DLLEXPORT void jl_start_io_thread(void)
     pthread_mutex_init(&wake_mut, NULL);
     pthread_cond_init(&wake_cond, NULL);
     pthread_create(&io_thread, NULL, run_io_thr, NULL);
+}
+
+DLLEXPORT uint8_t jl_zero_denormals(uint8_t isZero)
+{
+#ifdef __SSE2__
+    // SSE2 supports both FZ and DAZ
+    uint32_t flags = 0x8040;
+#elif __SSE__
+    // SSE supports only the FZ flag
+    uint32_t flags = 0x8000;
+#endif
+
+#ifdef __SSE__
+    if (isZero) {
+	_mm_setcsr(_mm_getcsr() | flags);
+    }
+    else {
+	_mm_setcsr(_mm_getcsr() & ~flags);
+    }
+    return 1;
+#else
+    return 0;
+#endif
 }

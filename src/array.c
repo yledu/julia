@@ -67,6 +67,7 @@ static jl_array_t *_new_array(jl_type_t *atype,
     a->length = nel;
     a->ndims = ndims;
     a->reshaped = 0;
+    a->ptrarray = !isunboxed;
     a->elsize = elsz;
     if (ndims == 1) {
         a->nrows = nel;
@@ -87,7 +88,7 @@ jl_array_t *jl_reshape_array(jl_type_t *atype, jl_array_t *data,
 {
     size_t i;
     jl_array_t *a;
-    size_t ndims = dims->length;
+    size_t ndims = jl_tuple_len(dims);
 
     int ndimwords = (ndims > 2 ? (ndims-2) : 0);
 #ifndef __LP64__
@@ -101,7 +102,104 @@ jl_array_t *jl_reshape_array(jl_type_t *atype, jl_array_t *data,
     a->length = data->length;
     a->elsize = data->elsize;
     a->ndims = ndims;
+    a->ptrarray = data->ptrarray;
     a->reshaped = 1;
+
+    if (ndims == 1) {
+        a->nrows = a->length;
+        a->maxsize = a->length;
+        a->offset = 0;
+    }
+    else {
+        size_t *adims = &a->nrows;
+        for(i=0; i < ndims; i++) {
+            adims[i] = jl_unbox_long(jl_tupleref(dims, i));
+        }
+    }
+    
+    return a;
+}
+
+// ** NOTE: julia_mallocated means buffer was allocated using julia_malloc.
+// using the address of another array does not work!!
+jl_array_t *jl_ptr_to_array_1d(jl_type_t *atype, void *data, size_t nel,
+                               int julia_mallocated)
+{
+    size_t elsz;
+    jl_array_t *a;
+    jl_type_t *el_type = (jl_type_t*)jl_tparam0(atype);
+
+    int isunboxed = jl_is_bits_type(el_type);
+    if (isunboxed)
+        elsz = jl_bitstype_nbits(el_type)/8;
+    else
+        elsz = sizeof(void*);
+
+    a = allocobj(sizeof(jl_array_t));
+    a->type = atype;
+    a->data = data;
+    a->length = nel;
+    a->elsize = elsz;
+    a->ptrarray = !isunboxed;
+    a->ndims = 1;
+
+    if (julia_mallocated) {
+        a->reshaped = 0;
+        jl_gc_acquire_buffer(data);
+    }
+    else {
+        // this marks the array as not owning its buffer
+        a->reshaped = 1;
+        *((jl_array_t**)(&a->_space[0])) = a;
+    }
+
+    a->nrows = a->length;
+    a->maxsize = a->length;
+    a->offset = 0;
+    
+    return a;
+}
+
+jl_array_t *jl_ptr_to_array(jl_type_t *atype, void *data, jl_tuple_t *dims,
+                            int julia_mallocated)
+{
+    size_t i, elsz, nel=1;
+    jl_array_t *a;
+    size_t ndims = jl_tuple_len(dims);
+
+    for(i=0; i < ndims; i++) {
+        nel *= jl_unbox_long(jl_tupleref(dims, i));
+    }
+    jl_type_t *el_type = (jl_type_t*)jl_tparam0(atype);
+
+    int isunboxed = jl_is_bits_type(el_type);
+    if (isunboxed)
+        elsz = jl_bitstype_nbits(el_type)/8;
+    else
+        elsz = sizeof(void*);
+
+    int ndimwords = (ndims > 2 ? (ndims-2) : 0);
+#ifndef __LP64__
+    // on 32-bit, ndimwords must be odd to preserve 8-byte alignment
+    ndimwords += (~ndimwords)&1;
+#endif
+    a = allocobj(sizeof(jl_array_t) + ndimwords*sizeof(size_t));
+    a->type = atype;
+    a->data = data;
+    a->length = nel;
+    a->elsize = elsz;
+    a->ptrarray = !isunboxed;
+    a->ndims = ndims;
+
+    if (julia_mallocated) {
+        a->reshaped = 0;
+        jl_gc_acquire_buffer(data);
+    }
+    else {
+        // this marks the array as not owning its buffer
+        a->reshaped = 1;
+        *((jl_array_t**)(&a->_space[0] + ndimwords*sizeof(size_t))) = a;
+    }
 
     if (ndims == 1) {
         a->nrows = a->length;
@@ -125,7 +223,7 @@ jl_array_t *jl_new_array_(jl_type_t *atype, uint32_t ndims, size_t *dims)
 
 jl_array_t *jl_new_array(jl_type_t *atype, jl_tuple_t *dims)
 {
-    size_t ndims = dims->length;
+    size_t ndims = jl_tuple_len(dims);
     size_t *adims = alloca(ndims*sizeof(size_t));
     size_t i;
     for(i=0; i < ndims; i++)
@@ -162,7 +260,10 @@ jl_value_t *jl_array_to_string(jl_array_t *a)
     // TODO: check type of array?
     jl_struct_type_t* string_type = u8_isvalid(a->data, a->length) == 1 ? // ASCII
         jl_ascii_string_type : jl_utf8_string_type;
-    return jl_apply((jl_function_t*)string_type, (jl_value_t**)&a, 1);
+    jl_value_t *s = alloc_2w();
+    s->type = (jl_type_t*)string_type;
+    jl_fieldref(s,0) = (jl_value_t*)a;
+    return s;
 }
 
 jl_value_t *jl_pchar_to_string(char *str, size_t len)
@@ -332,11 +433,11 @@ static void *array_new_buffer(jl_array_t *a, size_t newlen)
     if (a->elsize == 1) {
         nbytes++;
     }
-    int isunboxed = jl_is_bits_type(jl_tparam0(jl_typeof(a)));
     char *newdata = allocb(nbytes);
-    if (!isunboxed)
+    if (a->ptrarray)
         memset(newdata, 0, nbytes);
     if (a->elsize == 1) newdata[nbytes-1] = '\0';
+    a->reshaped = 0;
     return newdata;
 }
 

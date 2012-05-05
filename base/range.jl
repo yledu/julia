@@ -16,8 +16,9 @@ type Range{T<:Real} <: Ranges{T}
         new(start, step, len)
     end
     Range(start::T, step::T, len::Integer) = Range(start, step, int(len))
+    Range(start::T, step, len::Integer) = Range(start, convert(T,step), int(len))
 end
-Range{T}(start::T, step::T, len::Integer) = Range{T}(start, step, len)
+Range{T}(start::T, step, len::Integer) = Range{T}(start, step, len)
 
 type Range1{T<:Real} <: Ranges{T}
     start::T
@@ -67,6 +68,11 @@ last{T}(r::Range1{T}) = r.start + oftype(T,r.len-1)
 step(r::Range)  = r.step
 step(r::Range1) = one(r.start)
 
+min(r::Range1) = r.start
+max(r::Range1) = last(r)
+min(r::Range) = r.step > 0 ? r.start : last(r)
+max(r::Range) = r.step > 0 ? last(r) : r.start
+
 # Ranges are intended to be immutable
 copy(r::Ranges) = r
 
@@ -88,8 +94,8 @@ ref(r::Range, s::Range1{Int}) =
 ref(r::Range1, s::Range1{Int}) =
     r.len < last(s) ? error(BoundsError) : Range1(r[s.start], s.len)
 
-show(r::Range)  = print(r.start,':',r.step,':',last(r))
-show(r::Range1) = print(r.start,':',last(r))
+show(io, r::Range)  = print(io, r.start,':',r.step,':',last(r))
+show(io, r::Range1) = print(io, r.start,':',last(r))
 
 start(r::Ranges) = 0
 next(r::Range,  i) = (r.start + oftype(r.start,i)*step(r), i+1)
@@ -101,7 +107,7 @@ isequal(r::Range1, s::Range1) = (r.start==s.start) & (r.len==s.len)
 
 # TODO: isless?
 
-intersect(r::Range1, s::Range1) = max(r.start,s.start):min(last(r),last(r))
+intersect(r::Range1, s::Range1) = max(r.start,s.start):min(last(r),last(s))
 
 # TODO: general intersect?
 function intersect(r::Range1, s::Range)
@@ -151,29 +157,29 @@ end
 
 ## non-linear operations on ranges ##
 
-./(x::Number, r::Ranges) = [ x/y | y=r ]
-./(r::Ranges, y::Number) = [ x/y | x=r ]
+./(x::Number, r::Ranges) = [ x/y for y=r ]
+./(r::Ranges, y::Number) = [ x/y for x=r ]
 function ./(r::Ranges, s::Ranges)
     if length(r) != length(s)
         error("argument dimensions must match")
     end
-    [ r[i]/s[i] | i = 1:length(r) ]
+    [ r[i]/s[i] for i = 1:length(r) ]
 end
 
 function .*(r::Ranges, s::Ranges)
     if length(r) != length(s)
         error("argument dimensions must match")
     end
-    [ r[i]*s[i] | i = 1:length(r) ]
+    [ r[i]*s[i] for i = 1:length(r) ]
 end
 
-.^(x::Number, r::Ranges) = [ x^y | y=r ]
-.^(r::Ranges, y::Number) = [ x^y | x=r ]
+.^(x::Number, r::Ranges) = [ x^y for y=r ]
+.^(r::Ranges, y::Number) = [ x^y for x=r ]
 function .^(r::Ranges, s::Ranges)
     if length(r) != length(s)
         error("argument dimensions must match")
     end
-    [ r[i]^s[i] | i = 1:length(r) ]
+    [ r[i]^s[i] for i = 1:length(r) ]
 end
 
 ## concatenation ##
@@ -218,8 +224,7 @@ sortperm(r::Range1) = (r, 1:length(r))
 sortperm{T<:Real}(r::Range{T}) = issorted(r) ? (r, 1:1:length(r)) :
                                                (reverse(r), length(r):-1:1)
 
-function sum(r::Range1)
-    n1, n2 = r.start, last(r)
-    div((n2*(n2+1) - (n1-1)*n1), 2)
-    # TODO: verify that this is actually correct
+function sum(r::Ranges)
+    l = length(r)
+    return l * first(r) + step(r) * div(l * (l - 1), 2)
 end

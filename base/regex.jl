@@ -27,7 +27,7 @@ Regex(p::String)             = Regex(p, 0, false)
 # constructs are correctly handled.
 
 macro r_str(pattern, flags...)
-    options = 0
+    options = PCRE_UTF8
     for fx in flags, f in fx
         options |= f=='i' ? PCRE_CASELESS  :
                    f=='m' ? PCRE_MULTILINE :
@@ -38,22 +38,26 @@ macro r_str(pattern, flags...)
     Regex(pattern, options)
 end
 
-function show(re::Regex)
-    if (re.options & ~(PCRE_CASELESS|PCRE_MULTILINE|PCRE_DOTALL|PCRE_EXTENDED))==0
-        print('r')
-        print_quoted_literal(re.pattern)
-        if (re.options & PCRE_CASELESS ) != 0; print('i'); end
-        if (re.options & PCRE_MULTILINE) != 0; print('m'); end
-        if (re.options & PCRE_DOTALL   ) != 0; print('s'); end
-        if (re.options & PCRE_EXTENDED ) != 0; print('x'); end
+function show(io, re::Regex)
+    imsx = PCRE_CASELESS|PCRE_MULTILINE|PCRE_DOTALL|PCRE_EXTENDED
+    if (re.options & ~imsx) == PCRE_UTF8
+        print(io, 'r')
+        print_quoted_literal(io, re.pattern)
+        if (re.options & PCRE_CASELESS ) != 0; print(io, 'i'); end
+        if (re.options & PCRE_MULTILINE) != 0; print(io, 'm'); end
+        if (re.options & PCRE_DOTALL   ) != 0; print(io, 's'); end
+        if (re.options & PCRE_EXTENDED ) != 0; print(io, 'x'); end
     else
-        print("Regex(")
-        show(re.pattern)
-        print(',')
-        show(re.options)
-        print(')')
+        print(io, "Regex(")
+        show(io, re.pattern)
+        print(io, ',')
+        show(io, re.options)
+        print(io, ')')
     end
 end
+
+# TODO: map offsets into non-ByteStrings back to original indices.
+# or maybe it's better to just fail since that would be quite slow
 
 type RegexMatch
     match::ByteString
@@ -62,36 +66,51 @@ type RegexMatch
     offsets::Vector{Int}
 end
 
-function show(m::RegexMatch)
-    print("RegexMatch(")
-    show(m.match)
+function show(io, m::RegexMatch)
+    print(io, "RegexMatch(")
+    show(io, m.match)
     if !isempty(m.captures)
-        print(", ")
+        print(io, ", ")
         for i = 1:length(m.captures)
-            print(i, "=")
-            show(m.captures[i])
+            print(io, i, "=")
+            show(io, m.captures[i])
             if i < length(m.captures)
-                print(", ")
+                print(io, ", ")
             end
         end
     end
-    print(")")
+    print(io, ")")
 end
 
-matches(r::Regex, s::String, o::Integer) = pcre_exec(r.regex, r.extra, cstring(s), 1, o, false)
+matches(r::Regex, s::String, o::Integer) =
+    pcre_exec(r.regex, r.extra, cstring(s), 0, o, false)
 matches(r::Regex, s::String) = matches(r, s, r.options & PCRE_EXECUTE_MASK)
 
-function match(re::Regex, str::ByteString, offset::Integer, opts::Integer)
-    m, n = pcre_exec(re.regex, re.extra, str, offset, opts, true)
+contains(s::String, r::Regex, opts::Integer) = matches(r,s,opts)
+contains(s::String, r::Regex)                = matches(r,s)
+
+function match(re::Regex, str::ByteString, idx::Integer, opts::Integer)
+    m, n = pcre_exec(re.regex, re.extra, str, idx-1, opts, true)
     if isempty(m); return nothing; end
     mat = str[m[1]+1:m[2]]
     cap = ntuple(n, i->(m[2i+1] < 0 ? nothing : str[m[2i+1]+1:m[2i+2]]))
     off = map(i->m[2i+1]+1, [1:n])
     RegexMatch(mat, cap, m[1]+1, off)
 end
-match(r::Regex, s::String, o::Integer, p::Integer) = match(r, cstring(s), o, p)
-match(r::Regex, s::String, o::Integer) = match(r, s, o, r.options & PCRE_EXECUTE_MASK)
-match(r::Regex, s::String) = match(r, s, 1)
+match(r::Regex, s::String, i::Integer, o::Integer) = match(r, cstring(s), i, o)
+match(r::Regex, s::String, i::Integer) = match(r, s, i, r.options & PCRE_EXECUTE_MASK)
+match(r::Regex, s::String) = match(r, s, start(s))
+
+function search(str::ByteString, re::Regex, idx::Integer)
+    len = length(str)
+    if idx >= len+2
+        return idx == len+2 ? (0,0) : error("index out of range")
+    end
+    opts = re.options & PCRE_EXECUTE_MASK
+    m, n = pcre_exec(re.regex, re.extra, str, idx-1, opts, true)
+    isempty(m) ? (0,0) : (m[1]+1,m[2]+1)
+end
+search(s::ByteString, r::Regex) = search(s,r,start(s))
 
 type RegexMatchIterator
     regex::Regex
@@ -104,52 +123,5 @@ done(itr::RegexMatchIterator, m) = m == nothing
 next(itr::RegexMatchIterator, m) =
     (m, match(itr.regex, itr.string, m.offset + (itr.overlap ? 1 : length(m.match))))
 
-each_match(r::Regex, s::String) = RegexMatchIterator(r,s,false)
-each_match_overlap(r::Regex, s::String) = RegexMatchIterator(r,s,true)
-
-function split(s::String, regex::Regex, include_empty::Bool, limit::Integer)
-    s = cstring(s)
-    strs = String[]
-    i = j = start(s)
-    while !done(s,i) && (limit == 0 || length(strs) < limit)
-        m = match(regex,s,j)
-        if m == nothing
-            break
-        end
-        tok = s[i:m.offset-1]
-        if include_empty || !isempty(tok)
-            push(strs, tok)
-        end
-        i = m.offset+length(m.match)
-        j = m.offset+max(1,length(m.match))
-    end
-    if include_empty || i < length(s)
-        push(strs, s[i:end])
-    end
-    return strs
-end
-
-split(s::String, x::String, incl::Bool, limit::Integer) =
-    strwidth(x) == 1 ? split(s, x[1], incl, limit) :
-    split(s, Regex(strcat("\\Q",x)), incl, limit)
-
-split(s::String, regex::Regex, include_empty::Bool) =
-    split(s, regex, include_empty, 0)
-
-split(s::String, x::String, incl::Bool) =
-    strwidth(x) == 1 ? split(s, x[1], incl) :
-    split(s, Regex(strcat("\\Q",x)), incl)
-
-replace(s::String, regex::Regex, repl::String, limit::Integer) =
-    join(split(s, regex, true, limit), repl)
-
-replace(s::String, regex::Regex, repl::String) =
-    join(split(s, regex, true, 0), repl)
-
-replace(s::String, x::String, repl::String, limit::Integer) =
-    strwidth(x) == 1 ? replace(s, x[1], repl, limit) :
-    replace(s, Regex(strcat("\\Q",x)), repl, limit)
-
-replace(s::String, x::String, repl::String) =
-    strwidth(x) == 1 ? replace(s, x[1], repl) :
-    replace(s, Regex(strcat("\\Q",x)), repl)
+each_match(re::Regex, str::String, ovr::Bool) = RegexMatchIterator(re,str,ovr)
+each_match(re::Regex, str::String)            = RegexMatchIterator(re,str,false)

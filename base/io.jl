@@ -1,3 +1,5 @@
+abstract IO
+
 const sizeof_off_t = int(ccall(:jl_sizeof_off_t, Int32, ()))
 const sizeof_ios_t = int(ccall(:jl_sizeof_ios_t, Int32, ()))
 const sizeof_fd_set = int(ccall(:jl_sizeof_fd_set, Int32, ()))
@@ -8,10 +10,12 @@ else
     typealias FileOffset Int64
 end
 
-type IOStream
+type IOStream <: IO
     # NOTE: for some reason the order of these field is significant!?
     ios::Array{Uint8,1}
     name::String
+
+    IOStream(name::String, buf::Array{Uint8,1}) = new(buf, name)
 
     # TODO: delay adding finalizer, e.g. for memio with a small buffer, or
     # in the case where we takebuf it.
@@ -23,10 +27,9 @@ type IOStream
         return x
     end
     IOStream(name::String) = IOStream(name, true)
-
-    global make_stdout_stream
-    make_stdout_stream() = new(ccall(:jl_stdout_stream, Any, ()), "<stdout>")
 end
+
+convert(T::Type{Ptr{Void}}, s::IOStream) = convert(T, s.ios)
 
 # "own" means the descriptor will be closed with the IOStream
 function fdio(name::String, fd::Integer, own::Bool)
@@ -36,13 +39,14 @@ function fdio(name::String, fd::Integer, own::Bool)
     return s
 end
 fdio(name::String, fd::Integer) = fdio(name, fd, false)
-fdio(fd::Integer, own::Bool) = fdio(strcat("<fd ",fd,">"), fd, own)
+fdio(fd::Integer, own::Bool) = fdio(string("<fd ",fd,">"), fd, own)
 fdio(fd::Integer) = fdio(fd, false)
 
 make_stdin_stream() = fdio("<stdin>", ccall(:jl_stdin, Int32, ()))
 make_stderr_stream() = fdio("<stderr>", ccall(:jl_stderr, Int32, ()))
+make_stdout_stream() = IOStream("<stdout>", ccall(:jl_stdout_stream, Any, ()))
 
-show(s::IOStream) = print("IOStream(",s.name,")")
+show(io, s::IOStream) = print(io, "IOStream(", s.name, ")")
 
 fd(s::IOStream) = ccall(:jl_ios_fd, Int, (Ptr{Void},), s.ios)
 close(s::IOStream) = ccall(:ios_close, Void, (Ptr{Void},), s.ios)
@@ -79,58 +83,42 @@ end
 memio(x::Integer) = memio(x, true)
 memio() = memio(0, true)
 
-convert(T::Type{Ptr}, s::IOStream) = convert(T, s.ios)
-
-current_output_stream() = ccall(:jl_current_output_stream_obj, IOStream, ())
-
-set_current_output_stream(s::IOStream) =
-    ccall(:jl_set_current_output_stream_obj, Void, (Any,), s)
-
-function with_output_stream(s::IOStream, f::Function, args...)
-    try
-        set_current_output_stream(s)
-        f(args...)
-    catch e
-        throw(e)
-    end
-end
-
-# custom version for print_to_*
-function _jl_with_output_stream(s::IOStream, f::Function, args...)
-    try
-        set_current_output_stream(s)
-        f(args...)
-    catch e
-        # only add finalizer if takebuf doesn't happen
-        finalizer(s, close)
-        throw(e)
-    end
-end
-
-takebuf_array(s::IOStream) =
-    ccall(:jl_takebuf_array, Any, (Ptr{Void},), s.ios)::Array{Uint8,1}
-
 takebuf_string(s::IOStream) =
-    ccall(:jl_takebuf_string, Any, (Ptr{Void},), s.ios)::ByteString
+    ccall(:jl_takebuf_string, ByteString, (Ptr{Void},), s.ios)
 
-function print_to_array(size::Integer, f::Function, args...)
+function sprint(size::Integer, f::Function, args...)
     s = memio(size, false)
-    _jl_with_output_stream(s, f, args...)
-    takebuf_array(s)
-end
-
-function print_to_string(size::Integer, f::Function, args...)
-    s = memio(size, false)
-    _jl_with_output_stream(s, f, args...)
+    f(s, args...)
     takebuf_string(s)
 end
 
-print_to_array(f::Function, args...) = print_to_array(0, f, args...)
-print_to_string(f::Function, args...) = print_to_string(0, f, args...)
+sprint(f::Function, args...) = sprint(0, f, args...)
+
+function sshow(x)
+    s = memio(0, false)
+    show(s, x)
+    takebuf_string(s)
+end
+
+# using this is not recommended
+function with_output_to_string(thunk)
+    global OUTPUT_STREAM
+    oldio = OUTPUT_STREAM
+    m = memio()
+    OUTPUT_STREAM = m
+    try
+        thunk()
+        OUTPUT_STREAM = oldio
+    catch e
+        OUTPUT_STREAM = oldio
+        throw(e)
+    end
+    takebuf_string(m)
+end
 
 nthbyte(x::Integer, n::Integer) = (n > sizeof(x) ? uint8(0) : uint8((x>>>((n-1)<<3))))
 
-write(x) = write(current_output_stream(), x)
+write(x) = write(OUTPUT_STREAM::IOStream, x)
 write(s, x::Uint8) = error(typeof(s)," does not support byte I/O")
 
 function write(s, x::Integer)
@@ -234,10 +222,9 @@ function read{T<:Union(Int8,Uint8,Int16,Uint16,Int32,Uint32,Int64,Uint64,Float32
     end
 end
 
-function readuntil(s::IOStream, delim::Uint8)
-    a = ccall(:jl_readuntil, Any, (Ptr{Void}, Uint8), s.ios, delim)
-    # TODO: faster versions that avoid this encoding check
-    ccall(:jl_array_to_string, Any, (Any,), a)::ByteString
+function readuntil(s::IOStream, delim)
+    # TODO: faster versions that avoid the encoding check
+    ccall(:jl_readuntil, ByteString, (Ptr{Void}, Uint8), s.ios, delim)
 end
 
 function readall(s::IOStream)
@@ -246,7 +233,7 @@ function readall(s::IOStream)
     takebuf_string(dest)
 end
 
-readline(s::IOStream) = readuntil(s, uint8('\n'))
+readline(s::IOStream) = readuntil(s, '\n')
 
 flush(s::IOStream) = ccall(:ios_flush, Void, (Ptr{Void},), s.ios)
 
@@ -263,7 +250,9 @@ skip(s::IOStream, delta::Integer) =
 
 position(s::IOStream) = ccall(:ios_pos, FileOffset, (Ptr{Void},), s.ios)
 
-type IOTally
+eof(s::IOStream) = bool(ccall(:jl_ios_eof, Int32, (Ptr{Void},), s.ios))
+
+type IOTally <: IO
     nbytes::Int
     IOTally() = new(0)
 end
@@ -341,25 +330,20 @@ end
 
 ## high-level iterator interfaces ##
 
-type LineIterator
+type EachLine
     stream::IOStream
 end
+each_line(stream::IOStream) = EachLine(stream)
 
-start(itr::LineIterator) = readline(itr.stream)
-function done(itr::LineIterator, line)
+start(itr::EachLine) = readline(itr.stream)
+function done(itr::EachLine, line)
     if !isempty(line)
         return false
     end
     close(itr.stream)
     true
 end
-
-function next(itr::LineIterator, this_line)
-    next_line = readline(itr.stream)
-    this_line, next_line
-end
-
-each_line(stream::IOStream) = LineIterator(stream)
+next(itr::EachLine, this_line) = (this_line, readline(itr.stream))
 
 function readlines(s, fx::Function...)
     a = {}
